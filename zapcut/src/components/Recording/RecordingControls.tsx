@@ -1,9 +1,142 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRecording, RecordingSettings } from '../../hooks/useRecording';
+import { invoke } from '@tauri-apps/api/core';
 
 interface RecordingControlsProps {
     className?: string;
 }
+
+// Reusable Video Preview Component
+const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const [videoUrl, setVideoUrl] = useState<string | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [duration, setDuration] = useState(0);
+    const [currentTime, setCurrentTime] = useState(0);
+
+    useEffect(() => {
+        const loadVideo = async () => {
+            try {
+                const trimmedPath = filePath.trim();
+                console.log('Loading video from path:', trimmedPath);
+
+                // Add a small delay to ensure file is fully written
+                await new Promise(resolve => setTimeout(resolve, 200));
+
+                // Read file as binary via backend command
+                const data = await invoke<number[]>('read_binary_file', { path: trimmedPath });
+                console.log('Successfully read file, size:', data.length, 'bytes');
+                // Convert array to Uint8Array
+                const uint8Array = new Uint8Array(data);
+                // Create a blob URL from the binary data
+                const blob = new Blob([uint8Array], { type: 'video/mp4' });
+                const url = URL.createObjectURL(blob);
+                console.log('Created blob URL:', url);
+                setVideoUrl(url);
+            } catch (error) {
+                console.error('Failed to load video:', error);
+            }
+        };
+
+        if (filePath) {
+            loadVideo();
+        }
+
+        // Cleanup: revoke blob URL when component unmounts or path changes
+        return () => {
+            if (videoUrl) {
+                URL.revokeObjectURL(videoUrl);
+            }
+        };
+    }, [filePath]);
+
+    const handlePlayPause = () => {
+        if (videoRef.current) {
+            if (isPlaying) {
+                videoRef.current.pause();
+            } else {
+                videoRef.current.play();
+            }
+            setIsPlaying(!isPlaying);
+        }
+    };
+
+    const handleLoadedMetadata = () => {
+        if (videoRef.current) {
+            setDuration(videoRef.current.duration);
+        }
+    };
+
+    const handleTimeUpdate = () => {
+        if (videoRef.current) {
+            setCurrentTime(videoRef.current.currentTime);
+        }
+    };
+
+    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newTime = parseFloat(e.target.value);
+        if (videoRef.current) {
+            videoRef.current.currentTime = newTime;
+            setCurrentTime(newTime);
+        }
+    };
+
+    const formatTime = (seconds: number): string => {
+        if (!isFinite(seconds)) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="flex-1 flex items-center justify-center bg-gray-900 rounded-lg border border-gray-700 mb-3">
+                {videoUrl ? (
+                    <video
+                        ref={videoRef}
+                        src={videoUrl}
+                        className="max-w-full max-h-full object-contain"
+                        onLoadedMetadata={handleLoadedMetadata}
+                        onTimeUpdate={handleTimeUpdate}
+                        onEnded={() => setIsPlaying(false)}
+                    />
+                ) : (
+                    <div className="text-gray-400">
+                        <p className="text-sm">Loading video...</p>
+                    </div>
+                )}
+            </div>
+
+            {/* Video Controls */}
+            {videoUrl && (
+                <div className="space-y-2">
+                    {/* Play/Pause and Time Display */}
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handlePlayPause}
+                            className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
+                        >
+                            {isPlaying ? '⏸ Pause' : '▶ Play'}
+                        </button>
+                        <span className="text-xs text-gray-400">
+                            {formatTime(currentTime)} / {formatTime(duration)}
+                        </span>
+                    </div>
+
+                    {/* Seek Bar */}
+                    <input
+                        type="range"
+                        min="0"
+                        max={duration || 0}
+                        value={currentTime}
+                        onChange={handleSeek}
+                        className="w-full h-1 bg-gray-700 rounded cursor-pointer accent-blue-600"
+                    />
+                </div>
+            )}
+        </div>
+    );
+};
 
 export const RecordingControls: React.FC<RecordingControlsProps> = ({ className = '' }) => {
     const {
@@ -22,6 +155,7 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
 
     const [settings, setSettings] = useState<RecordingSettings>({
         microphone: undefined,
+        microphone_enabled: false,
         webcam_enabled: false,
         webcam_device: undefined,
         screen_area: { type: 'full' },
@@ -29,7 +163,10 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
         output_path: undefined,
     });
 
-    const [showSettings, setShowSettings] = useState(false);
+    // Load devices on component mount
+    useEffect(() => {
+        loadDevices();
+    }, []);
 
     const loadDevices = async () => {
         await Promise.all([getMicrophones(), getWebcams()]);
@@ -46,6 +183,8 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
     const handleStopRecording = async () => {
         try {
             await stopRecording();
+            // Give the backend time to finalize the recording file
+            await new Promise(resolve => setTimeout(resolve, 500));
         } catch (error) {
             console.error('Failed to stop recording:', error);
         }
@@ -136,21 +275,8 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                     )}
                 </div>
 
-                {/* Settings Toggle */}
-                <button
-                    onClick={() => {
-                        setShowSettings(!showSettings);
-                        if (!showSettings) {
-                            loadDevices();
-                        }
-                    }}
-                    className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                >
-                    Settings
-                </button>
-
                 {/* Import/Export Buttons */}
-                {recordingState.output_file && (
+                {recordingState.output_file && !recordingState.is_recording && (
                     <div className="flex gap-2">
                         <button
                             onClick={handleImportToGallery}
@@ -168,28 +294,45 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                 )}
             </div>
 
-            {/* Settings Panel */}
-            {showSettings && (
-                <div className="mt-4 p-4 bg-gray-800 border rounded-lg shadow-sm">
+            {/* Settings and Preview Row */}
+            <div className="mt-4 flex gap-4">
+                {/* Settings Panel - 50% Width */}
+                <div className="w-1/2 p-4 bg-gray-800 border rounded-lg shadow-sm">
                     <h3 className="text-lg font-semibold mb-4 text-gray-100">Recording Settings</h3>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         {/* Microphone Settings */}
                         <div>
                             <label className="block text-sm font-medium mb-2 text-gray-100">Microphone</label>
-                            <select
-                                value={settings.microphone || ''}
-                                onChange={(e) => setSettings((prev: RecordingSettings) => ({
-                                    ...prev,
-                                    microphone: e.target.value || undefined
-                                }))}
-                                className="w-full p-2 border rounded bg-gray-700 text-gray-100"
-                            >
-                                <option value="">Default Microphone</option>
-                                {availableMicrophones.map((mic: string) => (
-                                    <option key={mic} value={mic}>{mic}</option>
-                                ))}
-                            </select>
+                            <div className="space-y-2">
+                                <label className="flex items-center text-gray-100">
+                                    <input
+                                        type="checkbox"
+                                        checked={settings.microphone_enabled}
+                                        onChange={(e) => setSettings((prev: RecordingSettings) => ({
+                                            ...prev,
+                                            microphone_enabled: e.target.checked
+                                        }))}
+                                        className="mr-2"
+                                    />
+                                    Enable Microphone
+                                </label>
+                                {settings.microphone_enabled && (
+                                    <select
+                                        value={settings.microphone || ''}
+                                        onChange={(e) => setSettings((prev: RecordingSettings) => ({
+                                            ...prev,
+                                            microphone: e.target.value || undefined
+                                        }))}
+                                        className="w-full p-2 border rounded bg-gray-700 text-gray-100"
+                                    >
+                                        <option value="">Default Microphone</option>
+                                        {availableMicrophones.map((mic: string) => (
+                                            <option key={mic} value={mic}>{mic}</option>
+                                        ))}
+                                    </select>
+                                )}
+                            </div>
                         </div>
 
                         {/* Webcam Settings */}
@@ -261,23 +404,30 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                             </select>
                         </div>
                     </div>
-
-                    {/* Output Path */}
-                    <div className="mt-4">
-                        <label className="block text-sm font-medium mb-2 text-gray-100">Output Path (Optional)</label>
-                        <input
-                            type="text"
-                            value={settings.output_path || ''}
-                            onChange={(e) => setSettings((prev: RecordingSettings) => ({
-                                ...prev,
-                                output_path: e.target.value || undefined
-                            }))}
-                            placeholder="Leave empty for default location"
-                            className="w-full p-2 border rounded bg-gray-700 text-gray-100"
-                        />
-                    </div>
                 </div>
-            )}
+
+                {/* Preview Section - 50% Width */}
+                <div className="w-1/2 p-4 bg-gray-800 border rounded-lg shadow-sm">
+                    {recordingState.output_file && !recordingState.is_recording ? (
+                        <div className="flex flex-col h-full">
+                            <h3 className="text-lg font-semibold mb-4 text-gray-100">Recording Preview</h3>
+                            <VideoPreview
+                                filePath={recordingState.output_file}
+                            />
+                        </div>
+                    ) : (
+                        <div className="flex flex-col h-full items-center justify-center">
+                            <div className="text-gray-500 text-center">
+                                <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                <p className="text-sm">Start and pause/stop recording</p>
+                                <p className="text-xs mt-1">to see preview here</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 };

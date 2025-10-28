@@ -5,10 +5,12 @@ use std::process::{Command, Stdio};
 use std::path::PathBuf;
 use tokio::fs;
 use anyhow::Result;
+use crate::utils::app_init::get_recordings_dir;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RecordingSettings {
     pub microphone: Option<String>,
+    pub microphone_enabled: bool,
     pub webcam_enabled: bool,
     pub webcam_device: Option<String>,
     pub screen_area: ScreenArea,
@@ -36,7 +38,7 @@ pub struct RecordingState {
     pub is_recording: bool,
     pub is_paused: bool,
     pub current_settings: RecordingSettings,
-    pub output_file: Option<PathBuf>,
+    pub output_file: Option<String>,
 }
 
 pub struct RecordingManager {
@@ -48,6 +50,7 @@ impl Default for RecordingSettings {
     fn default() -> Self {
         Self {
             microphone: None,
+            microphone_enabled: false,
             webcam_enabled: false,
             webcam_device: None,
             screen_area: ScreenArea::FullScreen,
@@ -153,23 +156,32 @@ pub async fn start_recording(
     
     // Generate output filename
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+    let filename = format!("recording_{}.mp4", timestamp);
+    
+    // Get the recordings directory
+    let recordings_dir = get_recordings_dir()
+        .map_err(|e| format!("Failed to get recordings directory: {}", e))?;
+    
     let output_file = settings.output_path
         .clone()
-        .unwrap_or_else(|| PathBuf::from(format!("recording_{}.mp4", timestamp)));
+        .unwrap_or_else(|| recordings_dir.join(&filename));
     
-    state.output_file = Some(output_file.clone());
+    state.output_file = Some(output_file.to_string_lossy().to_string());
     state.current_settings = settings.clone();
     state.is_recording = true;
     state.is_paused = false;
     
     // Build FFmpeg command based on settings
     let mut ffmpeg_cmd = Command::new("ffmpeg");
-    ffmpeg_cmd.arg("-f").arg("avfoundation"); // macOS screen capture
+    
+    // Set frame rate and other video options before input
+    ffmpeg_cmd.arg("-framerate").arg("30");
+    ffmpeg_cmd.arg("-f").arg("avfoundation");
     
     // Add video input (screen)
     match settings.screen_area {
         ScreenArea::FullScreen => {
-            ffmpeg_cmd.arg("-i").arg("1:0"); // Screen capture on macOS
+            ffmpeg_cmd.arg("-i").arg("1:0"); // Screen capture on macOS (1 = first screen)
         },
         ScreenArea::CurrentWindow => {
             ffmpeg_cmd.arg("-i").arg("1:0"); // Simplified for now
@@ -180,17 +192,17 @@ pub async fn start_recording(
         },
     }
     
-    // Add audio input if microphone is specified
-    if let Some(ref mic) = settings.microphone {
+    // Add audio input if microphone is enabled
+    if settings.microphone_enabled {
         ffmpeg_cmd.arg("-f").arg("avfoundation");
-        ffmpeg_cmd.arg("-i").arg(format!(":{}", mic));
+        ffmpeg_cmd.arg("-i").arg(":0"); // Default microphone on macOS
     }
     
     // Add webcam if enabled
     if settings.webcam_enabled {
-        if let Some(ref webcam) = settings.webcam_device {
+        if let Some(ref _webcam) = settings.webcam_device {
             ffmpeg_cmd.arg("-f").arg("avfoundation");
-            ffmpeg_cmd.arg("-i").arg(format!("{}:0", webcam));
+            ffmpeg_cmd.arg("-i").arg("0:0"); // Default camera
         }
     }
     
@@ -210,19 +222,42 @@ pub async fn start_recording(
         },
     }
     
-    // Output settings
+    // Video codec settings
     ffmpeg_cmd.arg("-c:v").arg("libx264");
     ffmpeg_cmd.arg("-preset").arg("fast");
-    ffmpeg_cmd.arg("-c:a").arg("aac");
-    ffmpeg_cmd.arg("-y"); // Overwrite output file
-    ffmpeg_cmd.arg(&output_file);
+    ffmpeg_cmd.arg("-crf").arg("28"); // Quality setting
+    
+    // Audio codec settings (if audio input exists)
+    if settings.microphone_enabled || settings.webcam_enabled {
+        ffmpeg_cmd.arg("-c:a").arg("aac");
+    }
+    
+    // Overwrite output file and set output path
+    ffmpeg_cmd.arg("-y");
+    ffmpeg_cmd.arg(output_file.to_str().unwrap());
     
     // Start the recording process
-    let process = ffmpeg_cmd
+    let mut process = ffmpeg_cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .stdin(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Failed to start recording: {}", e))?;
+    
+    // Capture stderr for debugging
+    if let Some(stderr) = process.stderr.take() {
+        let stderr_handle = std::thread::spawn(move || {
+            use std::io::BufRead;
+            let reader = std::io::BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    eprintln!("[FFmpeg] {}", line);
+                }
+            }
+        });
+        // Detach the thread so it doesn't block
+        let _ = stderr_handle;
+    }
     
     // Store the process handle
     let mut process_guard = manager.process.lock().await;
@@ -233,29 +268,43 @@ pub async fn start_recording(
 
 // Stop recording
 #[tauri::command]
-pub async fn stop_recording(manager: State<'_, RecordingManager>) -> Result<String, String> {
+pub async fn stop_recording(manager: State<'_, RecordingManager>) -> Result<RecordingState, String> {
     let mut state = manager.state.lock().await;
     
     if !state.is_recording {
         return Err("No recording in progress".to_string());
     }
     
-    // Terminate the recording process
+    // Terminate the recording process gracefully by sending 'q' to stdin
     let mut process_guard = manager.process.lock().await;
     if let Some(mut process) = process_guard.take() {
-        process.kill().map_err(|e| format!("Failed to stop recording: {}", e))?;
+        // Send 'q' command to stdin to gracefully quit FFmpeg
+        if let Some(mut stdin) = process.stdin.take() {
+            use std::io::Write;
+            let _ = stdin.write_all(b"q\n");
+            let _ = stdin.flush();
+        }
+        
+        // Wait for the process to finish (with a timeout)
+        let result = tokio::task::spawn_blocking(move || {
+            process.wait()
+        }).await;
+        
+        if result.is_err() {
+            // If waiting fails, just log it - the process should still have written the file
+            eprintln!("Warning: Could not wait for FFmpeg process to finish");
+        }
     }
     
     state.is_recording = false;
     state.is_paused = false;
     
-    let output_file = state.output_file.clone().unwrap_or_else(|| PathBuf::from("unknown.mp4"));
-    Ok(format!("Recording stopped: {}", output_file.display()))
+    Ok(state.clone())
 }
 
 // Pause recording
 #[tauri::command]
-pub async fn pause_recording(manager: State<'_, RecordingManager>) -> Result<String, String> {
+pub async fn pause_recording(manager: State<'_, RecordingManager>) -> Result<RecordingState, String> {
     let mut state = manager.state.lock().await;
     
     if !state.is_recording {
@@ -275,12 +324,12 @@ pub async fn pause_recording(manager: State<'_, RecordingManager>) -> Result<Str
     }
     
     state.is_paused = true;
-    Ok("Recording paused".to_string())
+    Ok(state.clone())
 }
 
 // Resume recording
 #[tauri::command]
-pub async fn resume_recording(manager: State<'_, RecordingManager>) -> Result<String, String> {
+pub async fn resume_recording(manager: State<'_, RecordingManager>) -> Result<RecordingState, String> {
     let mut state = manager.state.lock().await;
     
     if !state.is_recording {
@@ -300,7 +349,7 @@ pub async fn resume_recording(manager: State<'_, RecordingManager>) -> Result<St
     }
     
     state.is_paused = false;
-    Ok("Recording resumed".to_string())
+    Ok(state.clone())
 }
 
 // Get current recording state
@@ -316,15 +365,35 @@ pub async fn import_recording_to_gallery(
     _manager: State<'_, RecordingManager>,
     file_path: String,
 ) -> Result<String, String> {
-    // This would typically copy the file to a gallery directory
-    // and add metadata to a database
-    let gallery_path = PathBuf::from("gallery").join(PathBuf::from(&file_path).file_name().unwrap());
+    // Get the base Zapcut directory
+    let file_pb = PathBuf::from(&file_path);
+    let recordings_parent = file_pb.parent()
+        .ok_or_else(|| "Invalid file path".to_string())?;
+    let zapcut_dir = recordings_parent.parent()
+        .ok_or_else(|| "Invalid file path structure".to_string())?;
     
-    fs::copy(&file_path, &gallery_path)
+    let gallery_path = zapcut_dir.join("exports");
+    
+    // Ensure gallery directory exists
+    fs::create_dir_all(&gallery_path)
+        .await
+        .map_err(|e| format!("Failed to create gallery directory: {}", e))?;
+    
+    // Get the filename from the source path
+    let filename = file_pb
+        .file_name()
+        .ok_or_else(|| "Could not extract filename".to_string())?
+        .to_str()
+        .ok_or_else(|| "Invalid filename".to_string())?
+        .to_string();
+    
+    let destination = gallery_path.join(&filename);
+    
+    fs::copy(&file_path, &destination)
         .await
         .map_err(|e| format!("Failed to copy to gallery: {}", e))?;
     
-    Ok(format!("Recording imported to gallery: {}", gallery_path.display()))
+    Ok(format!("Recording imported to gallery: {}", destination.display()))
 }
 
 // Export recording to file
@@ -339,4 +408,59 @@ pub async fn export_recording_to_file(
         .map_err(|e| format!("Failed to export recording: {}", e))?;
     
     Ok(format!("Recording exported to: {}", destination_path))
+}
+
+// Generate thumbnail for recording
+#[tauri::command]
+pub async fn generate_recording_thumbnail(file_path: String) -> Result<String, String> {
+    use std::fs;
+    
+    // Create thumbnails directory in temp
+    let app_data = std::env::temp_dir().join("zapcut").join("thumbnails");
+    fs::create_dir_all(&app_data)
+        .map_err(|e| format!("Failed to create thumbnails directory: {}", e))?;
+    
+    // Generate unique thumbnail name
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S_%N");
+    let thumbnail_name = format!("recording_preview_{}.jpg", timestamp);
+    let thumbnail_path = app_data.join(&thumbnail_name);
+    
+    // Get video duration first
+    let ffprobe_output = Command::new("ffprobe")
+        .args(&[
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1:noprint_names=1",
+            &file_path,
+        ])
+        .output()
+        .map_err(|e| format!("Failed to get video duration: {}", e))?;
+    
+    let duration_str = String::from_utf8_lossy(&ffprobe_output.stdout);
+    let duration: f64 = duration_str.trim().parse().unwrap_or(1.0);
+    
+    // Generate thumbnail at 10% of the duration (or 1 second minimum)
+    let timestamp_seconds = (duration * 0.1).max(1.0).min(duration);
+    
+    // Use FFmpeg to generate thumbnail
+    let output = Command::new("ffmpeg")
+        .args(&[
+            "-ss", &timestamp_seconds.to_string(),
+            "-i", &file_path,
+            "-vframes", "1",
+            "-q:v", "2",
+            "-y",
+            thumbnail_path.to_str().unwrap(),
+        ])
+        .output()
+        .map_err(|e| format!("Failed to execute ffmpeg for thumbnail: {}", e))?;
+    
+    if !output.status.success() {
+        return Err(format!(
+            "FFmpeg thumbnail failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    
+    Ok(thumbnail_path.to_string_lossy().to_string())
 }

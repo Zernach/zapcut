@@ -14,10 +14,11 @@
         "title": "ZapCut",
         "width": 1400,
         "height": 900,
-        "minWidth": 1280,
+        "minWidth": 1080,
         "minHeight": 720,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "backgroundColor": "#0f1419"
       }
     ],
     "security": {

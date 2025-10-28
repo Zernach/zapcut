@@ -1,104 +1,104 @@
-// Core Background Colors
+// Core Background Colors - Deep Space Theme
 export const COLORS = {
-    // Backgrounds
-    background: '#1e1e1e',
-    panel: '#2d2d2d',
+    // Backgrounds - Deep space with slate foundations
+    background: '#0f1419',
+    panel: '#1a1f2e',
     black: '#000000',
-    darkGray: '#0a0a0a',
+    darkGray: '#0a0d12',
 
-    // Borders
-    border: '#3d3d3d',
+    // Borders - Subtle cyan/slate gradients
+    border: '#1e2d3d',
 
-    // Scrollbar
-    scrollbarTrack: '#2d2d2d',
-    scrollbarThumb: '#555',
-    scrollbarThumbHover: '#666',
+    // Scrollbar - Futuristic cyan accents
+    scrollbarTrack: '#1a1f2e',
+    scrollbarThumb: '#2d5f7f',
+    scrollbarThumbHover: '#3d7fa0',
 
-    // Canvas / Timeline
-    canvasBackground: '#1e1e1e',
-    timelineBackground: '#2d2d2d',
-    timelineBottomBorder: '#3d3d3d',
+    // Canvas / Timeline - Deep slate backgrounds
+    canvasBackground: '#0f1419',
+    timelineBackground: '#1a1f2e',
+    timelineBottomBorder: '#1e2d3d',
 
-    // Timeline Elements
-    timelineRulerFill: '#2d2d2d',
-    timelineTickMajor: '#888',
-    timelineTickLabel: '#aaa',
-    timelineRulerStroke: '#666',
+    // Timeline Elements - Cyan-based accents
+    timelineRulerFill: '#1a1f2e',
+    timelineTickMajor: '#2d5f7f',
+    timelineTickLabel: '#5f9fba',
+    timelineRulerStroke: '#2d5f7f',
 
-    // Timeline Playhead
-    playheadStroke: '#ff4444',
-    playheadFill: '#ff4444',
+    // Timeline Playhead - Energetic cyan
+    playheadStroke: '#00d9ff',
+    playheadFill: '#00d9ff',
 
-    // Timeline Clip
-    clipDefault: '#3a7bd5',
-    clipSelected: '#4a9eff',
+    // Timeline Clip - Cyan spectrum
+    clipDefault: '#0066cc',
+    clipSelected: '#00d9ff',
     clipResizeHandle: '#fff',
 
-    // Track
-    trackBackground: '#1e1e1e',
-    trackBorder: '#3d3d3d',
-    trackLabel: '#888',
+    // Track - Deep space foundations
+    trackBackground: '#0f1419',
+    trackBorder: '#1e2d3d',
+    trackLabel: '#5f9fba',
 
-    // Text
-    textPrimary: '#ffffff',
-    textSecondary: '#a0a0a0',
-    textMuted: '#666666',
-    textGray400: '#9ca3af',
-    textGray500: '#6b7280',
-    textGray600: '#4b5563',
-    textGray100: '#f3f4f6',
-    textGray300: '#d1d5db',
+    // Text - Clean contrast on deep backgrounds
+    textPrimary: '#f0f6fb',
+    textSecondary: '#a0c9e0',
+    textMuted: '#5f7f99',
+    textGray400: '#7f99b0',
+    textGray500: '#5f7f99',
+    textGray600: '#3d5f7f',
+    textGray100: '#f0f6fb',
+    textGray300: '#a0c9e0',
 
-    // Status Colors
-    statusError: '#ef4444',
-    statusSuccess: '#22c55e',
-    statusWarning: '#eab308',
-    statusInfo: '#3b82f6',
+    // Status Colors - Cosmic themed
+    statusError: '#ff3366',
+    statusSuccess: '#00ff88',
+    statusWarning: '#ffaa00',
+    statusInfo: '#00d9ff',
 
-    // UI States
-    uiRed: '#dc2626',
-    uiRedHover: '#b91c1c',
-    uiYellow: '#ca8a04',
-    uiYellowHover: '#b45309',
-    uiGreen: '#16a34a',
-    uiGreenHover: '#15803d',
-    uiBlue: '#2563eb',
-    uiBlueHover: '#1d4ed8',
-    uiPurple: '#7c3aed',
-    uiPurpleHover: '#6d28d9',
+    // UI States - Vibrant deep space colors
+    uiRed: '#ff3366',
+    uiRedHover: '#ff5588',
+    uiYellow: '#ffaa00',
+    uiYellowHover: '#ffbb22',
+    uiGreen: '#00ff88',
+    uiGreenHover: '#22ffaa',
+    uiBlue: '#0066cc',
+    uiBlueHover: '#0088ff',
+    uiPurple: '#aa00ff',
+    uiPurpleHover: '#cc22ff',
 
-    // Hover States
-    hoverOverlay: '#3d3d3d',
+    // Hover States - Cyan glow
+    hoverOverlay: '#00d9ff1a',
 
-    // Inputs & Selects
-    inputBackground: '#374151',
-    inputBorder: '#4b5563',
+    // Inputs & Selects - Slate with cyan borders
+    inputBackground: '#1e2d3d',
+    inputBorder: '#2d5f7f',
 
-    // Recording Settings
-    recordingSettingsBg: '#1f2937',
-    recordingSettingsText: '#f3f4f6',
-    recordingSettingsLabel: '#f3f4f6',
+    // Recording Settings - Consistent slate theme
+    recordingSettingsBg: '#1a1f2e',
+    recordingSettingsText: '#f0f6fb',
+    recordingSettingsLabel: '#f0f6fb',
 
-    // Error / Alert
-    errorBgLight: '#7f1d1d',
-    errorBorder: '#991b1b',
-    errorText: '#fca5a5',
+    // Error / Alert - Deep red accents
+    errorBgLight: '#4d0011',
+    errorBorder: '#990033',
+    errorText: '#ff99bb',
 
-    // Modals / Overlays
-    modalOverlay: 'rgba(0, 0, 0, 0.5)',
-    dropZoneOverlay: 'rgba(59, 130, 246, 0.1)',
-    dropZoneBorder: '#3b82f6',
-    dropZoneText: '#ffffff',
+    // Modals / Overlays - Translucent deep space
+    modalOverlay: 'rgba(0, 0, 0, 0.7)',
+    dropZoneOverlay: 'rgba(0, 217, 255, 0.08)',
+    dropZoneBorder: '#00d9ff',
+    dropZoneText: '#f0f6fb',
 
-    // Media Library
-    mediaItemBg: '#1f2937',
+    // Media Library - Slate foundations with cyan accents
+    mediaItemBg: '#1a1f2e',
     mediaItemBorderDefault: 'transparent',
-    mediaItemBorderHover: '#4b5563',
-    mediaItemBorderSelected: '#3b82f6',
+    mediaItemBorderHover: '#2d5f7f',
+    mediaItemBorderSelected: '#00d9ff',
 
-    // Video Player
+    // Video Player - Pure black deep space
     videoPlayerBg: '#000000',
-    playerMessageText: '#9ca3af',
+    playerMessageText: '#7f99b0',
 };
 
 // Utility function to get hover variant of a color
@@ -113,28 +113,28 @@ export const getHoverColor = (baseColor: string): string => {
     return hoverMap[baseColor] || baseColor;
 };
 
-// Tailwind color utilities
+// Tailwind color utilities - Deep space theme
 export const TAILWIND_COLORS = {
     blue: {
-        base: 'bg-blue-600',
-        hover: 'hover:bg-blue-700',
+        base: 'bg-blue-700',
+        hover: 'hover:bg-blue-600',
         disabled: 'disabled:bg-blue-800',
     },
     red: {
         base: 'bg-red-600',
-        hover: 'hover:bg-red-700',
+        hover: 'hover:bg-red-500',
         disabled: 'disabled:bg-red-800',
     },
     green: {
-        base: 'bg-green-600',
-        hover: 'hover:bg-green-700',
+        base: 'bg-emerald-600',
+        hover: 'hover:bg-emerald-500',
     },
     yellow: {
-        base: 'bg-yellow-600',
-        hover: 'hover:bg-yellow-700',
+        base: 'bg-amber-600',
+        hover: 'hover:bg-amber-500',
     },
     purple: {
-        base: 'bg-purple-600',
-        hover: 'hover:bg-purple-700',
+        base: 'bg-violet-600',
+        hover: 'hover:bg-violet-500',
     },
 };

@@ -22,6 +22,19 @@ body {
   height: 100vh;
 }
 
+/* Tauri drag region - enable dragging on this element */
+[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Ensure buttons and interactive elements are not draggable */
+[data-tauri-drag-region] button,
+[data-tauri-drag-region] a {
+  -webkit-app-region: no-drag;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

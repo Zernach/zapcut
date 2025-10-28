@@ -4,24 +4,24 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Core colors
-        background: '#1e1e1e',
-        panel: '#2d2d2d',
-        border: '#3d3d3d',
-        // Additional themed colors for consistency
-        'scrollbar-track': '#2d2d2d',
-        'scrollbar-thumb': '#555',
-        'scrollbar-thumb-hover': '#666',
-        // Timeline and canvas
-        'canvas-bg': '#1e1e1e',
-        'timeline-bg': '#2d2d2d',
-        'timeline-border': '#3d3d3d',
-        'playhead': '#ff4444',
-        'clip-default': '#3a7bd5',
-        'clip-selected': '#4a9eff',
-        // Media
-        'media-bg': '#1f2937',
-        'media-border-selected': '#3b82f6',
+        // Core colors - Deep Space Theme
+        background: '#0f1419',
+        panel: '#1a1f2e',
+        border: '#1e2d3d',
+        // Futuristic cyan accents
+        'scrollbar-track': '#1a1f2e',
+        'scrollbar-thumb': '#2d5f7f',
+        'scrollbar-thumb-hover': '#3d7fa0',
+        // Timeline and canvas - Deep slate
+        'canvas-bg': '#0f1419',
+        'timeline-bg': '#1a1f2e',
+        'timeline-border': '#1e2d3d',
+        'playhead': '#00d9ff',
+        'clip-default': '#0066cc',
+        'clip-selected': '#00d9ff',
+        // Media - Slate with cyan accents
+        'media-bg': '#1a1f2e',
+        'media-border-selected': '#00d9ff',
       },
     },
   },

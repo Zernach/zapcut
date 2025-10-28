@@ -144,3 +144,10 @@ pub async fn validate_video_file(file_path: String) -> Result<bool, String> {
     }
 }
 
+// Read binary file and return as Vec<u8>
+#[tauri::command]
+pub async fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
+    std::fs::read(&path)
+        .map_err(|e| format!("Failed to read file: {}", e))
+}
+

@@ -4,7 +4,11 @@ import { PlayerControls } from '../Player/PlayerControls';
 import { Timeline } from '../Timeline/Timeline';
 import { useMediaStore } from '../../store/mediaStore';
 
-export const EditLayout = () => {
+interface EditLayoutProps {
+    onExportClick?: () => void;
+}
+
+export const EditLayout = ({ onExportClick }: EditLayoutProps) => {
     const selectedItemId = useMediaStore((state) => state.selectedItemId);
     const items = useMediaStore((state) => state.items);
 
@@ -14,7 +18,7 @@ export const EditLayout = () => {
         <div className="flex-1 flex overflow-hidden">
             {/* Left sidebar: Media library */}
             <div className="w-80 border-r border-border">
-                <MediaLibrary />
+                <MediaLibrary onExportClick={onExportClick} />
             </div>
 
             {/* Center: Player and Timeline */}

@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 export interface RecordingSettings {
     microphone?: string;
+    microphone_enabled: boolean;
     webcam_enabled: boolean;
     webcam_device?: string;
     screen_area: ScreenArea;
@@ -74,6 +75,7 @@ export const useRecording = () => {
         is_paused: false,
         current_settings: {
             microphone: undefined,
+            microphone_enabled: false,
             webcam_enabled: false,
             webcam_device: undefined,
             screen_area: { type: 'full' },
@@ -136,12 +138,8 @@ export const useRecording = () => {
     // Stop recording
     const stopRecording = useCallback(async () => {
         try {
-            const result = await invoke<string>('stop_recording');
-            setRecordingState(prev => ({
-                ...prev,
-                is_recording: false,
-                is_paused: false,
-            }));
+            const result = await invoke<RecordingState>('stop_recording');
+            setRecordingState(result);
             return result;
         } catch (error) {
             console.error('Failed to stop recording:', error);
@@ -152,11 +150,8 @@ export const useRecording = () => {
     // Pause recording
     const pauseRecording = useCallback(async () => {
         try {
-            const result = await invoke<string>('pause_recording');
-            setRecordingState(prev => ({
-                ...prev,
-                is_paused: true,
-            }));
+            const result = await invoke<RecordingState>('pause_recording');
+            setRecordingState(result);
             return result;
         } catch (error) {
             console.error('Failed to pause recording:', error);
@@ -167,11 +162,8 @@ export const useRecording = () => {
     // Resume recording
     const resumeRecording = useCallback(async () => {
         try {
-            const result = await invoke<string>('resume_recording');
-            setRecordingState(prev => ({
-                ...prev,
-                is_paused: false,
-            }));
+            const result = await invoke<RecordingState>('resume_recording');
+            setRecordingState(result);
             return result;
         } catch (error) {
             console.error('Failed to resume recording:', error);
@@ -216,6 +208,26 @@ export const useRecording = () => {
         }
     }, []);
 
+    // Generate and fetch thumbnail for recording
+    const generateRecordingThumbnail = useCallback(async (filePath: string): Promise<string | null> => {
+        try {
+            // Generate thumbnail using FFmpeg
+            const thumbnailPath = await invoke<string>('generate_recording_thumbnail', {
+                filePath
+            });
+
+            // Convert to base64 for display
+            const base64Thumbnail = await invoke<string>('get_thumbnail_base64', {
+                thumbnailPath
+            });
+
+            return base64Thumbnail;
+        } catch (error) {
+            console.error('Failed to generate recording thumbnail:', error);
+            return null;
+        }
+    }, []);
+
     return {
         recordingState,
         availableMicrophones,
@@ -229,5 +241,6 @@ export const useRecording = () => {
         getRecordingState,
         importToGallery,
         exportToFile,
+        generateRecordingThumbnail,
     };
 };

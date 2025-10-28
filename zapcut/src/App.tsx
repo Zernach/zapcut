@@ -1,35 +1,23 @@
-import { useState } from 'react';
 import { TopToolbar } from './components/TopToolbar/TopToolbar';
-import { EditLayout } from './components/Layouts/EditLayout';
-import { RecordLayout } from './components/Layouts/RecordLayout';
+import { MainBody } from './components/MainBody';
 import { ExportDialog } from './components/Export/ExportDialog';
 import { useAppInitialization } from './hooks/useAppInitialization';
 import { usePlayerTimelineSync } from './hooks/usePlayerTimelineSync';
 
 function App() {
-    const [showExportDialog, setShowExportDialog] = useState(false);
-    const [activeTab, setActiveTab] = useState<'edit' | 'record'>('edit');
-
-    // Initialize app directories on mount
-    useAppInitialization();
-
-    // Synchronize player and timeline
-    usePlayerTimelineSync();
+    useAppInitialization(); // Initialize app directories on mount
+    usePlayerTimelineSync(); // Synchronize player and timeline
 
     return (
         <div className="h-screen flex flex-col bg-background text-white">
             {/* Top toolbar */}
-            <TopToolbar
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
-                onExportClick={() => setShowExportDialog(true)}
-            />
+            <TopToolbar />
 
             {/* Main content */}
-            {activeTab === 'edit' ? <EditLayout /> : <RecordLayout />}
+            <MainBody />
 
             {/* Export dialog */}
-            <ExportDialog open={showExportDialog} onClose={() => setShowExportDialog(false)} />
+            <ExportDialog />
         </div>
     );
 }

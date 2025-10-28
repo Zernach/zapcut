@@ -2,15 +2,13 @@ import { useState } from 'react';
 import { save } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { useTimelineStore } from '../../store/timelineStore';
+import { useAppStore } from '../../store/appStore';
 import { ExportConfig } from '../../types/export';
 import { X, FileVideo } from 'lucide-react';
 
-interface ExportDialogProps {
-    open: boolean;
-    onClose: () => void;
-}
-
-export function ExportDialog({ open, onClose }: ExportDialogProps) {
+export function ExportDialog() {
+    const showExportDialog = useAppStore((state) => state.showExportDialog);
+    const setShowExportDialog = useAppStore((state) => state.setShowExportDialog);
     const clips = useTimelineStore((state) => state.clips);
     const [isExporting, setIsExporting] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -24,7 +22,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
         includeAudio: true,
     });
 
-    if (!open) return null;
+    if (!showExportDialog) return null;
 
     const handleExport = async () => {
         try {
@@ -83,7 +81,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                 if (prog.status === 'complete') {
                     clearInterval(progressInterval);
                     setIsExporting(false);
-                    onClose();
+                    setShowExportDialog(false);
                     alert('Export completed successfully!');
                 } else if (prog.status === 'error') {
                     clearInterval(progressInterval);
@@ -100,6 +98,12 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
         }
     };
 
+    const handleClose = () => {
+        if (!isExporting) {
+            setShowExportDialog(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-panel rounded-lg shadow-xl w-[500px] max-h-[80vh] overflow-auto">
@@ -110,7 +114,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                         <h2 className="text-lg font-semibold">Export Video</h2>
                     </div>
                     <button
-                        onClick={onClose}
+                        onClick={handleClose}
                         className="p-1 hover:bg-gray-700 rounded transition-colors"
                         disabled={isExporting}
                     >
@@ -209,7 +213,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                 {/* Footer */}
                 <div className="flex items-center justify-end gap-2 p-4 border-t border-border">
                     <button
-                        onClick={onClose}
+                        onClick={handleClose}
                         className="px-4 py-2 hover:bg-gray-700 rounded transition-colors"
                         disabled={isExporting}
                     >

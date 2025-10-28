@@ -2,9 +2,13 @@ import { useMediaStore } from '../../store/mediaStore';
 import { MediaItem as MediaItemComponent } from './MediaItem';
 import { DropZone } from './DropZone';
 import { useMediaImport } from '../../hooks/useMediaImport';
-import { Upload } from 'lucide-react';
+import { Upload, FileVideo } from 'lucide-react';
 
-export function MediaLibrary() {
+interface MediaLibraryProps {
+    onExportClick?: () => void;
+}
+
+export function MediaLibrary({ onExportClick }: MediaLibraryProps) {
     const items = useMediaStore((state) => state.items);
     const { importFromFilePicker, isImporting } = useMediaImport();
 
@@ -12,15 +16,26 @@ export function MediaLibrary() {
         <div className="h-full flex flex-col bg-panel">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-border">
-                <h2 className="text-lg font-semibold">Media Library</h2>
-                <button
-                    onClick={importFromFilePicker}
-                    disabled={isImporting}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed rounded text-sm flex items-center gap-2 transition-colors"
-                >
-                    <Upload size={16} />
-                    Import
-                </button>
+                <h2 className="text-lg font-semibold">Media</h2>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={importFromFilePicker}
+                        disabled={isImporting}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed rounded text-sm flex items-center gap-2 transition-colors"
+                    >
+                        <Upload size={16} />
+                        Import
+                    </button>
+                    {onExportClick && (
+                        <button
+                            onClick={onExportClick}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm flex items-center gap-2 transition-colors"
+                        >
+                            <FileVideo size={16} />
+                            Export
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Drop zone and grid */}

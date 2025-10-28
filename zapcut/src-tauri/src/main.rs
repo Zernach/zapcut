@@ -4,13 +4,14 @@
 mod commands;
 mod utils;
 
-use commands::media::{import_video, import_videos, validate_video_file, get_thumbnail_base64, read_video_file};
+use commands::media::{import_video, import_videos, validate_video_file, get_thumbnail_base64, read_video_file, read_binary_file};
 use commands::export::{export_timeline, get_export_progress};
 use commands::recording::{
     RecordingManager,
     get_available_microphones, get_available_webcams,
     start_recording, stop_recording, pause_recording, resume_recording,
     get_recording_state, import_recording_to_gallery, export_recording_to_file,
+    generate_recording_thumbnail,
 };
 use commands::app::init_app;
 
@@ -26,6 +27,7 @@ fn main() {
             validate_video_file,
             get_thumbnail_base64,
             read_video_file,
+            read_binary_file,
             export_timeline,
             get_export_progress,
             get_available_microphones,
@@ -37,6 +39,7 @@ fn main() {
             get_recording_state,
             import_recording_to_gallery,
             export_recording_to_file,
+            generate_recording_thumbnail,
             init_app,
         ])
         .run(tauri::generate_context!())
