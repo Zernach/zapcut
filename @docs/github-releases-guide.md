@@ -176,24 +176,6 @@ Ensure you have the MSVC build tools installed via Visual Studio.
 - Check that GitHub Actions is enabled in repository settings
 - Ensure the workflow file is on the default branch before pushing the tag
 
-## Platform-Specific Notes
-
-### Windows
-
-The recording functionality has platform-specific implementations:
-- **Stop Recording**: Uses `Child::kill()` instead of Unix signals
-- **Pause/Resume**: Not supported on Windows (returns error message)
-
-Recording start/stop works on all platforms, but pause/resume is Unix/macOS only.
-
-### macOS
-
-Full recording support including pause/resume using Unix signals (SIGSTOP/SIGCONT).
-
-### Linux
-
-Full recording support including pause/resume using Unix signals (SIGSTOP/SIGCONT).
-
 ## Resources
 
 - [Tauri GitHub Action](https://github.com/tauri-apps/tauri-action)
