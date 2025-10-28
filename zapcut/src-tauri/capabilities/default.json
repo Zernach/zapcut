@@ -16,6 +16,36 @@
       "allow": []
     },
     {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        { "path": "$HOME/Downloads/**" },
+        { "path": "$TEMP/**" },
+        { "path": "$TMPDIR/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-dir",
+      "allow": [
+        { "path": "$HOME/Downloads/**" },
+        { "path": "$TEMP/**" },
+        { "path": "$TMPDIR/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        { "path": "$TEMP/**" },
+        { "path": "$TMPDIR/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write",
+      "allow": [
+        { "path": "$TEMP/**" },
+        { "path": "$TMPDIR/**" }
+      ]
+    },
+    {
       "identifier": "fs:default",
       "allow": []
     },

@@ -4,7 +4,7 @@
 mod commands;
 mod utils;
 
-use commands::media::{import_video, import_videos, validate_video_file};
+use commands::media::{import_video, import_videos, validate_video_file, get_thumbnail_base64, read_video_file};
 use commands::export::{export_timeline, get_export_progress};
 
 fn main() {
@@ -16,6 +16,8 @@ fn main() {
             import_video,
             import_videos,
             validate_video_file,
+            get_thumbnail_base64,
+            read_video_file,
             export_timeline,
             get_export_progress,
         ])

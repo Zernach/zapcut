@@ -1,7 +1,8 @@
+import { useState, useEffect } from 'react';
 import { MediaItem as MediaItemType } from '../../types/media';
 import { useMediaStore } from '../../store/mediaStore';
 import { formatDuration } from '../../utils/formatUtils';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 import { X } from 'lucide-react';
 
 interface MediaItemProps {
@@ -9,12 +10,33 @@ interface MediaItemProps {
 }
 
 export function MediaItem({ item }: MediaItemProps) {
+    const [thumbnailSrc, setThumbnailSrc] = useState<string | null>(null);
     const selectedId = useMediaStore((state) => state.selectedItemId);
     const selectItem = useMediaStore((state) => state.selectItem);
     const removeItem = useMediaStore((state) => state.removeItem);
 
     const isSelected = selectedId === item.id;
-    const thumbnailSrc = item.thumbnailPath ? convertFileSrc(item.thumbnailPath) : null;
+
+    // Load thumbnail from backend as base64
+    useEffect(() => {
+        if (!item.thumbnailPath) {
+            return;
+        }
+
+        const loadThumbnail = async () => {
+            try {
+                const base64Data = await invoke<string>('get_thumbnail_base64', {
+                    thumbnailPath: item.thumbnailPath,
+                });
+                setThumbnailSrc(base64Data);
+            } catch (error) {
+                console.error('MediaItem - Failed to load thumbnail:', error);
+                setThumbnailSrc(null);
+            }
+        };
+
+        loadThumbnail();
+    }, [item.thumbnailPath]);
 
     const handleClick = () => {
         selectItem(item.id);

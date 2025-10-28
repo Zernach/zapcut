@@ -100,6 +100,31 @@ fn generate_thumbnail_for_import(
 }
 
 #[command]
+pub async fn get_thumbnail_base64(thumbnail_path: String) -> Result<String, String> {
+    use std::fs;
+    
+    // Read the thumbnail file
+    let file_data = fs::read(&thumbnail_path)
+        .map_err(|e| format!("Failed to read thumbnail file: {}", e))?;
+    
+    // Convert to base64
+    let base64 = base64::encode(&file_data);
+    
+    Ok(format!("data:image/jpeg;base64,{}", base64))
+}
+
+#[command]
+pub async fn read_video_file(file_path: String) -> Result<Vec<u8>, String> {
+    use std::fs;
+    
+    // Read the video file
+    let file_data = fs::read(&file_path)
+        .map_err(|e| format!("Failed to read video file: {}", e))?;
+    
+    Ok(file_data)
+}
+
+#[command]
 pub async fn validate_video_file(file_path: String) -> Result<bool, String> {
     // Check file extension
     let valid_extensions = vec!["mp4", "mov", "webm", "avi", "mkv"];

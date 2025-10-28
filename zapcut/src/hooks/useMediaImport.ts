@@ -30,11 +30,39 @@ export function useMediaImport() {
             const filePaths = Array.isArray(selected) ? selected : [selected];
 
             // Import videos via Tauri command
-            const items = await invoke<MediaItem[]>('import_videos', {
+            const items = await invoke<any[]>('import_videos', {
                 filePaths,
             });
 
-            addItems(items);
+            // Log raw backend response
+            console.log('useMediaImport - Raw backend response:', items);
+
+            // Transform snake_case to camelCase
+            const transformedItems: MediaItem[] = items.map(item => {
+                console.log('useMediaImport - Processing item:', {
+                    id: item.id,
+                    name: item.name,
+                    file_path: item.file_path,
+                    thumbnail_path: item.thumbnail_path
+                });
+
+                return {
+                    id: item.id,
+                    name: item.name,
+                    filePath: item.file_path,
+                    duration: item.duration,
+                    width: item.width,
+                    height: item.height,
+                    fps: item.fps,
+                    thumbnailPath: item.thumbnail_path,
+                    fileSize: item.file_size,
+                    codec: item.codec,
+                    importedAt: item.imported_at,
+                };
+            });
+
+            console.log('useMediaImport - Transformed items:', transformedItems);
+            addItems(transformedItems);
         } catch (error) {
             console.error('Import failed:', error);
             // TODO: Show error toast
@@ -47,11 +75,39 @@ export function useMediaImport() {
         try {
             setIsImporting(true);
 
-            const items = await invoke<MediaItem[]>('import_videos', {
+            const items = await invoke<any[]>('import_videos', {
                 filePaths,
             });
 
-            addItems(items);
+            // Log raw backend response
+            console.log('useMediaImport (importFromPaths) - Raw backend response:', items);
+
+            // Transform snake_case to camelCase
+            const transformedItems: MediaItem[] = items.map(item => {
+                console.log('useMediaImport (importFromPaths) - Processing item:', {
+                    id: item.id,
+                    name: item.name,
+                    file_path: item.file_path,
+                    thumbnail_path: item.thumbnail_path
+                });
+
+                return {
+                    id: item.id,
+                    name: item.name,
+                    filePath: item.file_path,
+                    duration: item.duration,
+                    width: item.width,
+                    height: item.height,
+                    fps: item.fps,
+                    thumbnailPath: item.thumbnail_path,
+                    fileSize: item.file_size,
+                    codec: item.codec,
+                    importedAt: item.imported_at,
+                };
+            });
+
+            console.log('useMediaImport (importFromPaths) - Transformed items:', transformedItems);
+            addItems(transformedItems);
         } catch (error) {
             console.error('Import failed:', error);
         } finally {
