@@ -1,4 +1,5 @@
 import { Group, Rect, Line, Text } from 'react-konva';
+import { COLORS } from '../../constants/colors';
 
 interface TimeRulerProps {
     width: number;
@@ -23,20 +24,20 @@ export function TimeRuler({ width, height, zoom }: TimeRulerProps) {
     return (
         <Group>
             {/* Background */}
-            <Rect x={0} y={0} width={width} height={height} fill="#2d2d2d" />
+            <Rect x={0} y={0} width={width} height={height} fill={COLORS.timelineRulerFill} />
 
             {/* Major ticks and labels */}
             {majorTicks.map((time) => {
                 const x = time * zoom;
                 return (
                     <Group key={`major-${time}`}>
-                        <Line points={[x, height - 10, x, height]} stroke="#888" strokeWidth={1} />
+                        <Line points={[x, height - 10, x, height]} stroke={COLORS.timelineTickMajor} strokeWidth={1} />
                         <Text
                             x={x + 2}
                             y={2}
                             text={formatTime(time)}
                             fontSize={11}
-                            fill="#aaa"
+                            fill={COLORS.timelineTickLabel}
                             fontFamily="monospace"
                         />
                     </Group>
@@ -50,14 +51,14 @@ export function TimeRuler({ width, height, zoom }: TimeRulerProps) {
                     <Line
                         key={`minor-${time}`}
                         points={[x, height - 5, x, height]}
-                        stroke="#666"
+                        stroke={COLORS.timelineRulerStroke}
                         strokeWidth={1}
                     />
                 );
             })}
 
             {/* Bottom border */}
-            <Line points={[0, height, width, height]} stroke="#3d3d3d" strokeWidth={1} />
+            <Line points={[0, height, width, height]} stroke={COLORS.timelineBottomBorder} strokeWidth={1} />
         </Group>
     );
 }

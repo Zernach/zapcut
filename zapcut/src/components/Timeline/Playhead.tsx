@@ -1,5 +1,6 @@
 import { Group, Line, Rect } from 'react-konva';
 import { useTimelineStore } from '../../store/timelineStore';
+import { COLORS } from '../../constants/colors';
 import { KonvaEventObject } from 'konva/lib/Node';
 
 interface PlayheadProps {
@@ -23,10 +24,10 @@ export function Playhead({ currentTime, height, zoom }: PlayheadProps) {
     return (
         <Group x={x} y={0} draggable onDragMove={handleDragMove}>
             {/* Playhead handle */}
-            <Rect x={-6} y={0} width={12} height={20} fill="#ff4444" cornerRadius={[0, 0, 4, 4]} />
+            <Rect x={-6} y={0} width={12} height={20} fill={COLORS.playheadFill} cornerRadius={[0, 0, 4, 4]} />
 
             {/* Playhead line */}
-            <Line points={[0, 20, 0, height]} stroke="#ff4444" strokeWidth={2} />
+            <Line points={[0, 20, 0, height]} stroke={COLORS.playheadStroke} strokeWidth={2} />
         </Group>
     );
 }

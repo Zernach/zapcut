@@ -1,6 +1,7 @@
 import { Group, Rect, Text } from 'react-konva';
 import { Clip } from '../../types/media';
 import { useTimelineStore } from '../../store/timelineStore';
+import { COLORS } from '../../constants/colors';
 import { KonvaEventObject } from 'konva/lib/Node';
 
 interface TimelineClipProps {
@@ -43,7 +44,7 @@ export function TimelineClip({ clip, zoom, trackHeight }: TimelineClipProps) {
             <Rect
                 width={width}
                 height={height}
-                fill={isSelected ? '#4a9eff' : '#3a7bd5'}
+                fill={isSelected ? COLORS.clipSelected : COLORS.clipDefault}
                 cornerRadius={4}
                 shadowColor="black"
                 shadowBlur={5}
@@ -57,7 +58,7 @@ export function TimelineClip({ clip, zoom, trackHeight }: TimelineClipProps) {
                 width={width - 16}
                 text={clip.name}
                 fontSize={12}
-                fill="white"
+                fill={COLORS.textPrimary}
                 ellipsis={true}
                 fontFamily="sans-serif"
             />
@@ -65,8 +66,8 @@ export function TimelineClip({ clip, zoom, trackHeight }: TimelineClipProps) {
             {/* Trim handles */}
             {isSelected && (
                 <>
-                    <Rect x={0} y={0} width={5} height={height} fill="#fff" opacity={0.8} />
-                    <Rect x={width - 5} y={0} width={5} height={height} fill="#fff" opacity={0.8} />
+                    <Rect x={0} y={0} width={5} height={height} fill={COLORS.clipResizeHandle} opacity={0.8} />
+                    <Rect x={width - 5} y={0} width={5} height={height} fill={COLORS.clipResizeHandle} opacity={0.8} />
                 </>
             )}
         </Group>

@@ -1,6 +1,7 @@
 import { Group, Rect, Text } from 'react-konva';
 import { Track as TrackType } from '../../types/timeline';
 import { useTimelineStore } from '../../store/timelineStore';
+import { COLORS } from '../../constants/colors';
 import { TimelineClip } from './TimelineClip';
 
 interface TrackProps {
@@ -19,7 +20,7 @@ export function Track({ track, y, width, height, zoom }: TrackProps) {
     return (
         <Group y={y}>
             {/* Track background */}
-            <Rect x={0} y={0} width={width} height={height} fill="#1e1e1e" />
+            <Rect x={0} y={0} width={width} height={height} fill={COLORS.trackBackground} />
 
             {/* Track label */}
             <Text
@@ -27,7 +28,7 @@ export function Track({ track, y, width, height, zoom }: TrackProps) {
                 y={8}
                 text={track.type.toUpperCase()}
                 fontSize={11}
-                fill="#888"
+                fill={COLORS.trackLabel}
                 fontFamily="sans-serif"
             />
 
@@ -37,7 +38,7 @@ export function Track({ track, y, width, height, zoom }: TrackProps) {
             ))}
 
             {/* Bottom border */}
-            <Rect x={0} y={height - 1} width={width} height={1} fill="#3d3d3d" />
+            <Rect x={0} y={height - 1} width={width} height={1} fill={COLORS.trackBorder} />
         </Group>
     );
 }
