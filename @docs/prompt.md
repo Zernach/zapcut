@@ -1,5 +1,9 @@
 Build a Desktop Video Editor 
 
+**Project Links:**
+- Website: https://zapcut.archlife.org
+- GitHub: https://github.com/Zernach/zapcut
+
 Create an in-depth plan in the product-requirements-document.md and tasks-checklists.md files
 
 We are building a Desktop Video Editor
