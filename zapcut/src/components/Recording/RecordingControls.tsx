@@ -13,6 +13,12 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
+    const [error, setError] = useState<string | null>(null);
+    const activeUrlRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        console.log('[VideoPreview] Component mounted/updated with filePath:', filePath);
+    }, [filePath]);
 
     useEffect(() => {
         const loadVideo = async () => {
@@ -20,32 +26,61 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
                 const trimmedPath = filePath.trim();
                 console.log('Loading video from path:', trimmedPath);
 
-                // Add a small delay to ensure file is fully written
-                await new Promise(resolve => setTimeout(resolve, 200));
+                // Retry logic: try up to 5 times with increasing delays to ensure file is ready
+                let lastError: unknown = '';
+                for (let attempt = 0; attempt < 5; attempt++) {
+                    try {
+                        const delay = 200 + (attempt * 300); // 200ms, 500ms, 800ms, 1100ms, 1400ms
+                        console.log(`Attempt ${attempt + 1}/5: Waiting ${delay}ms before reading file`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
 
-                // Read file as binary via backend command
-                const data = await invoke<number[]>('read_binary_file', { path: trimmedPath });
-                console.log('Successfully read file, size:', data.length, 'bytes');
-                // Convert array to Uint8Array
-                const uint8Array = new Uint8Array(data);
-                // Create a blob URL from the binary data
-                const blob = new Blob([uint8Array], { type: 'video/mp4' });
-                const url = URL.createObjectURL(blob);
-                console.log('Created blob URL:', url);
-                setVideoUrl(url);
+                        // Read file as binary via backend command
+                        const data = await invoke<number[]>('read_binary_file', { path: trimmedPath });
+                        console.log('Successfully read file, size:', data.length, 'bytes');
+
+                        // Convert array to Uint8Array
+                        const uint8Array = new Uint8Array(data);
+                        // Create a blob URL from the binary data
+                        const blob = new Blob([uint8Array], { type: 'video/mp4' });
+                        const url = URL.createObjectURL(blob);
+                        console.log('Created blob URL:', url);
+
+                        // Revoke the old URL only after we've successfully created the new one
+                        if (activeUrlRef.current && activeUrlRef.current !== url) {
+                            URL.revokeObjectURL(activeUrlRef.current);
+                        }
+
+                        activeUrlRef.current = url;
+                        setVideoUrl(url);
+                        setError(null);
+                        return; // Success, exit
+                    } catch (error) {
+                        lastError = error;
+                        console.warn(`Attempt ${attempt + 1}/5 failed:`, error);
+                        if (attempt === 4) {
+                            throw lastError; // Throw on final attempt
+                        }
+                    }
+                }
             } catch (error) {
-                console.error('Failed to load video:', error);
+                const errorMessage = `Failed to load video: ${error}`;
+                console.error(errorMessage);
+                setError(errorMessage);
+                setVideoUrl(null);
             }
         };
 
         if (filePath) {
+            setVideoUrl(null); // Reset URL when path changes
+            setError(null);
             loadVideo();
         }
 
-        // Cleanup: revoke blob URL when component unmounts or path changes
+        // Cleanup: revoke blob URL when component unmounts
         return () => {
-            if (videoUrl) {
-                URL.revokeObjectURL(videoUrl);
+            if (activeUrlRef.current) {
+                URL.revokeObjectURL(activeUrlRef.current);
+                activeUrlRef.current = null;
             }
         };
     }, [filePath]);
@@ -55,7 +90,10 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
             if (isPlaying) {
                 videoRef.current.pause();
             } else {
-                videoRef.current.play();
+                videoRef.current.play().catch((err) => {
+                    console.error('Error playing video:', err);
+                    setError(`Failed to play video: ${err.message}`);
+                });
             }
             setIsPlaying(!isPlaying);
         }
@@ -81,6 +119,20 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
         }
     };
 
+    const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+        const video = e.currentTarget;
+        const errorCode = video.error?.code;
+        const errorMessages: { [key: number]: string } = {
+            1: 'MEDIA_ERR_ABORTED - Video loading was aborted',
+            2: 'MEDIA_ERR_NETWORK - Network error occurred',
+            3: 'MEDIA_ERR_DECODE - Video decoding failed',
+            4: 'MEDIA_ERR_SRC_NOT_SUPPORTED - Video format not supported or URL invalid',
+        };
+        const message = errorMessages[errorCode || 0] || `Video loading error: ${errorCode}`;
+        console.error(`[VideoPreview] ${message}`, { videoUrl, filePath });
+        setError(message);
+    };
+
     const formatTime = (seconds: number): string => {
         if (!isFinite(seconds)) return '0:00';
         const mins = Math.floor(seconds / 60);
@@ -91,7 +143,12 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
     return (
         <div className="flex flex-col h-full">
             <div className="flex-1 flex items-center justify-center bg-gray-900 rounded-lg border border-gray-700 mb-3">
-                {videoUrl ? (
+                {error ? (
+                    <div className="text-red-400 text-center p-4">
+                        <p className="font-semibold mb-2">Error Loading Video</p>
+                        <p className="text-sm break-words">{error}</p>
+                    </div>
+                ) : videoUrl ? (
                     <video
                         ref={videoRef}
                         src={videoUrl}
@@ -99,6 +156,7 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
                         onLoadedMetadata={handleLoadedMetadata}
                         onTimeUpdate={handleTimeUpdate}
                         onEnded={() => setIsPlaying(false)}
+                        onError={handleVideoError}
                     />
                 ) : (
                     <div className="text-gray-400">
@@ -108,7 +166,7 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
             </div>
 
             {/* Video Controls */}
-            {videoUrl && (
+            {videoUrl && !error && (
                 <div className="space-y-2">
                     {/* Play/Pause and Time Display */}
                     <div className="flex items-center gap-3">
@@ -141,8 +199,13 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
 export const RecordingControls: React.FC<RecordingControlsProps> = ({ className = '' }) => {
     const {
         recordingState,
+        availableScreens,
         availableMicrophones,
         availableWebcams,
+        checkScreenRecordingPermission,
+        testScreenRecordingAccess,
+        testRecordingCommand,
+        getScreens,
         getMicrophones,
         getWebcams,
         startRecording,
@@ -158,33 +221,72 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
         microphone_enabled: false,
         webcam_enabled: false,
         webcam_device: undefined,
-        screen_area: { type: 'full' },
-        aspect_ratio: { type: '16:9' },
+        screen_device: undefined,
         output_path: undefined,
     });
 
-    // Load devices on component mount
+    const [hasScreenPermission, setHasScreenPermission] = useState<boolean | null>(null);
+    const [permissionChecked, setPermissionChecked] = useState(false);
+
+    // Load devices and check permissions on component mount
     useEffect(() => {
-        loadDevices();
+        loadDevicesAndCheckPermissions();
     }, []);
 
-    const loadDevices = async () => {
-        await Promise.all([getMicrophones(), getWebcams()]);
+    // Set default screen when screens are loaded
+    useEffect(() => {
+        if (availableScreens.length > 0 && !settings.screen_device) {
+            setSettings(prev => ({
+                ...prev,
+                screen_device: availableScreens[0]
+            }));
+        }
+    }, [availableScreens, settings.screen_device]);
+
+    const loadDevicesAndCheckPermissions = async () => {
+        await Promise.all([
+            getScreens(),
+            getMicrophones(),
+            getWebcams(),
+            checkPermissions()
+        ]);
+    };
+
+    const checkPermissions = async () => {
+        try {
+            console.log('[Permission Check] Starting permission check...');
+            const hasPermission = await checkScreenRecordingPermission();
+            console.log('[Permission Check] Permission result:', hasPermission);
+            setHasScreenPermission(hasPermission);
+            setPermissionChecked(true);
+        } catch (error) {
+            console.error('[Permission Check] Failed to check permissions:', error);
+            setHasScreenPermission(false);
+            setPermissionChecked(true);
+        }
     };
 
     const handleStartRecording = async () => {
         try {
+            // Check permission before starting
+            if (!hasScreenPermission) {
+                alert('Screen recording permission is required. Please enable it in System Settings > Privacy & Security > Screen Recording');
+                return;
+            }
             await startRecording(settings);
         } catch (error) {
             console.error('Failed to start recording:', error);
+            alert('Failed to start recording. Please check that screen recording permission is enabled.');
         }
     };
 
     const handleStopRecording = async () => {
         try {
-            await stopRecording();
-            // Give the backend time to finalize the recording file
-            await new Promise(resolve => setTimeout(resolve, 500));
+            console.log('Stopping recording...');
+            const result = await stopRecording();
+            console.log('Stop recording result:', result);
+            console.log('Returned output file:', result.output_file);
+            // The state will update automatically via the hook
         } catch (error) {
             console.error('Failed to stop recording:', error);
         }
@@ -229,8 +331,85 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
         }
     };
 
+    const WarningBox = (<div className="p-6 bg-red-900/20 border border-red-500/50 rounded-lg">
+        <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-red-400">Screen Recording Permission Required</h3>
+        </div>
+        <p className="text-gray-300 mb-4">
+            ZapCut needs screen recording access to capture your screen. Please enable this permission in your system settings.
+        </p>
+        <div className="bg-gray-800 p-4 rounded-lg mb-4">
+            <h4 className="font-semibold text-gray-200 mb-2">How to enable:</h4>
+            <ol className="list-decimal list-inside text-sm text-gray-300 space-y-1">
+                <li>Open System Settings (or System Preferences)</li>
+                <li>Go to Privacy & Security → Screen Recording</li>
+                <li>Find "ZapCut" in the list and enable it</li>
+                <li>Restart ZapCut if needed</li>
+            </ol>
+        </div>
+        <div className="flex gap-3">
+            <button
+                onClick={checkPermissions}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            >
+                Check Again
+            </button>
+            <button
+                onClick={() => window.open('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')}
+                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
+            >
+                Open System Settings
+            </button>
+            <button
+                onClick={() => {
+                    console.log('[Permission Check] Bypassing permission check...');
+                    setHasScreenPermission(true);
+                    setPermissionChecked(true);
+                }}
+                className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors"
+            >
+                Skip Check (Try Anyway)
+            </button>
+            <button
+                onClick={async () => {
+                    console.log('[Test] Running screen recording test...');
+                    const result = await testScreenRecordingAccess();
+                    alert(`Test Result: ${result}`);
+                }}
+                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+            >
+                Test Access
+            </button>
+            <button
+                onClick={async () => {
+                    console.log('[Test] Testing recording command...');
+                    const result = await testRecordingCommand(settings);
+                    alert(`Command Test Result:\n\n${result}`);
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors"
+            >
+                Test Command
+            </button>
+        </div>
+    </div>)
+
+    // Show permission prompt if permission is not granted
+    if (permissionChecked && !hasScreenPermission) {
+        return (
+            <div className={`recording-controls ${className}`}>
+                {WarningBox}
+            </div>
+        );
+    }
+
     return (
         <div className={`recording-controls ${className}`}>
+            {WarningBox}
             <div className="flex items-center gap-4 p-4 bg-gray-900 rounded-lg border border-gray-700">
                 {/* Recording Status */}
                 <div className="flex items-center gap-2">
@@ -301,6 +480,23 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                     <h3 className="text-lg font-semibold mb-4 text-gray-100">Recording Settings</h3>
 
                     <div className="grid grid-cols-1 gap-4">
+                        {/* Screen Recording Device */}
+                        <div>
+                            <label className="block text-sm font-medium mb-2 text-gray-100">Screen Recording Device</label>
+                            <select
+                                value={settings.screen_device || ''}
+                                onChange={(e) => setSettings((prev: RecordingSettings) => ({
+                                    ...prev,
+                                    screen_device: e.target.value || undefined
+                                }))}
+                                className="w-full p-2 border rounded bg-gray-700 text-gray-100"
+                            >
+                                {availableScreens.map((screen: string) => (
+                                    <option key={screen} value={screen}>{screen}</option>
+                                ))}
+                            </select>
+                        </div>
+
                         {/* Microphone Settings */}
                         <div>
                             <label className="block text-sm font-medium mb-2 text-gray-100">Microphone</label>
@@ -367,41 +563,6 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                                     </select>
                                 )}
                             </div>
-                        </div>
-
-                        {/* Screen Area Settings */}
-                        <div>
-                            <label className="block text-sm font-medium mb-2 text-gray-100">Screen Area</label>
-                            <select
-                                value={settings.screen_area.type}
-                                onChange={(e) => setSettings((prev: RecordingSettings) => ({
-                                    ...prev,
-                                    screen_area: { type: e.target.value as any }
-                                }))}
-                                className="w-full p-2 border rounded bg-gray-700 text-gray-100"
-                            >
-                                <option value="full">Full Screen</option>
-                                <option value="window">Current Window</option>
-                                <option value="custom">Custom Area</option>
-                            </select>
-                        </div>
-
-                        {/* Aspect Ratio Settings */}
-                        <div>
-                            <label className="block text-sm font-medium mb-2 text-gray-100">Aspect Ratio</label>
-                            <select
-                                value={settings.aspect_ratio.type}
-                                onChange={(e) => setSettings((prev: RecordingSettings) => ({
-                                    ...prev,
-                                    aspect_ratio: { type: e.target.value as any }
-                                }))}
-                                className="w-full p-2 border rounded bg-gray-700 text-gray-100"
-                            >
-                                <option value="16:9">16:9</option>
-                                <option value="4:3">4:3</option>
-                                <option value="1:1">1:1 (Square)</option>
-                                <option value="custom">Custom</option>
-                            </select>
                         </div>
                     </div>
                 </div>

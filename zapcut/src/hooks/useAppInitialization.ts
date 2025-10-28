@@ -5,10 +5,17 @@ export function useAppInitialization() {
     useEffect(() => {
         const initializeApp = async () => {
             try {
+                // Small delay to ensure Tauri is fully initialized
+                await new Promise(resolve => setTimeout(resolve, 100));
+
                 const zapCutDir = await invoke<string>('init_app');
                 console.log('Zapcut directory initialized:', zapCutDir);
             } catch (error) {
                 console.error('Failed to initialize app directories:', error);
+                // Log more specific error info for debugging
+                if (error instanceof Error) {
+                    console.error('Error details:', error.message, error.stack);
+                }
             }
         };
 

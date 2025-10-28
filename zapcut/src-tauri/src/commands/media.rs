@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use tauri::command;
+use base64::{engine::general_purpose, Engine as _};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MediaItem {
@@ -108,7 +109,7 @@ pub async fn get_thumbnail_base64(thumbnail_path: String) -> Result<String, Stri
         .map_err(|e| format!("Failed to read thumbnail file: {}", e))?;
     
     // Convert to base64
-    let base64 = base64::encode(&file_data);
+    let base64 = general_purpose::STANDARD.encode(&file_data);
     
     Ok(format!("data:image/jpeg;base64,{}", base64))
 }
@@ -147,7 +148,24 @@ pub async fn validate_video_file(file_path: String) -> Result<bool, String> {
 // Read binary file and return as Vec<u8>
 #[tauri::command]
 pub async fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
+    use std::path::Path;
+    
+    // First check if file exists
+    if !Path::new(&path).exists() {
+        return Err(format!("File does not exist at path: {}", path));
+    }
+    
+    // Get file metadata for debugging
+    match fs::metadata(&path) {
+        Ok(metadata) => {
+            eprintln!("[read_binary_file] File exists - Size: {} bytes", metadata.len());
+        }
+        Err(e) => {
+            return Err(format!("Failed to read file metadata: {} - Path: {}", e, path));
+        }
+    }
+    
     std::fs::read(&path)
-        .map_err(|e| format!("Failed to read file: {}", e))
+        .map_err(|e| format!("Failed to read file: {} - Path: {}", e, path))
 }
 

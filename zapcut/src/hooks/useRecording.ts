@@ -6,24 +6,10 @@ export interface RecordingSettings {
     microphone_enabled: boolean;
     webcam_enabled: boolean;
     webcam_device?: string;
-    screen_area: ScreenArea;
-    aspect_ratio: AspectRatio;
+    screen_device?: string;
     output_path?: string;
 }
 
-export interface ScreenArea {
-    type: 'full' | 'window' | 'custom';
-    x?: number;
-    y?: number;
-    width?: number;
-    height?: number;
-}
-
-export interface AspectRatio {
-    type: '16:9' | '4:3' | '1:1' | 'custom';
-    width?: number;
-    height?: number;
-}
 
 export interface RecordingState {
     is_recording: boolean;
@@ -32,42 +18,6 @@ export interface RecordingState {
     output_file?: string;
 }
 
-// Transform AspectRatio to Rust enum format
-const transformAspectRatio = (ratio: AspectRatio): unknown => {
-    switch (ratio.type) {
-        case '16:9':
-            return 'Ratio16_9';
-        case '4:3':
-            return 'Ratio4_3';
-        case '1:1':
-            return 'Ratio1_1';
-        case 'custom':
-            return { Custom: { width: ratio.width || 1920, height: ratio.height || 1080 } };
-        default:
-            return 'Ratio16_9';
-    }
-};
-
-// Transform ScreenArea to Rust enum format
-const transformScreenArea = (area: ScreenArea): unknown => {
-    switch (area.type) {
-        case 'full':
-            return 'FullScreen';
-        case 'window':
-            return 'CurrentWindow';
-        case 'custom':
-            return {
-                Custom: {
-                    x: area.x || 0,
-                    y: area.y || 0,
-                    width: area.width || 1920,
-                    height: area.height || 1080,
-                },
-            };
-        default:
-            return 'FullScreen';
-    }
-};
 
 export const useRecording = () => {
     const [recordingState, setRecordingState] = useState<RecordingState>({
@@ -78,8 +28,6 @@ export const useRecording = () => {
             microphone_enabled: false,
             webcam_enabled: false,
             webcam_device: undefined,
-            screen_area: { type: 'full' },
-            aspect_ratio: { type: '16:9' },
             output_path: undefined,
         },
         output_file: undefined,
@@ -87,6 +35,54 @@ export const useRecording = () => {
 
     const [availableMicrophones, setAvailableMicrophones] = useState<string[]>([]);
     const [availableWebcams, setAvailableWebcams] = useState<string[]>([]);
+    const [availableScreens, setAvailableScreens] = useState<string[]>([]);
+
+    // Check screen recording permission
+    const checkScreenRecordingPermission = useCallback(async (): Promise<boolean> => {
+        try {
+            const hasPermission = await invoke<boolean>('check_screen_recording_permission');
+            return hasPermission;
+        } catch (error) {
+            console.error('Failed to check screen recording permission:', error);
+            return false;
+        }
+    }, []);
+
+    // Test screen recording access with FFmpeg
+    const testScreenRecordingAccess = useCallback(async (): Promise<string> => {
+        try {
+            const result = await invoke<string>('test_screen_recording_access');
+            console.log('[Test] Screen recording test result:', result);
+            return result;
+        } catch (error) {
+            console.error('[Test] Failed to test screen recording access:', error);
+            return `Test failed: ${error}`;
+        }
+    }, []);
+
+    // Test the exact recording command
+    const testRecordingCommand = useCallback(async (settings: RecordingSettings): Promise<string> => {
+        try {
+            const result = await invoke<string>('test_recording_command', { settings });
+            console.log('[Test] Recording command test result:', result);
+            return result;
+        } catch (error) {
+            console.error('[Test] Failed to test recording command:', error);
+            return `Test failed: ${error}`;
+        }
+    }, []);
+
+    // Get available screens
+    const getScreens = useCallback(async () => {
+        try {
+            const screens = await invoke<string[]>('get_available_screens');
+            setAvailableScreens(screens);
+            return screens;
+        } catch (error) {
+            console.error('Failed to get screens:', error);
+            return [];
+        }
+    }, []);
 
     // Get available microphones
     const getMicrophones = useCallback(async () => {
@@ -115,13 +111,7 @@ export const useRecording = () => {
     // Start recording
     const startRecording = useCallback(async (settings: RecordingSettings) => {
         try {
-            // Transform settings to match Rust enum format
-            const transformedSettings = {
-                ...settings,
-                aspect_ratio: transformAspectRatio(settings.aspect_ratio),
-                screen_area: transformScreenArea(settings.screen_area),
-            };
-            const result = await invoke<string>('start_recording', { settings: transformedSettings });
+            const result = await invoke<string>('start_recording', { settings });
             setRecordingState(prev => ({
                 ...prev,
                 is_recording: true,
@@ -230,8 +220,13 @@ export const useRecording = () => {
 
     return {
         recordingState,
+        availableScreens,
         availableMicrophones,
         availableWebcams,
+        checkScreenRecordingPermission,
+        testScreenRecordingAccess,
+        testRecordingCommand,
+        getScreens,
         getMicrophones,
         getWebcams,
         startRecording,

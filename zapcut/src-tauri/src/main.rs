@@ -8,10 +8,11 @@ use commands::media::{import_video, import_videos, validate_video_file, get_thum
 use commands::export::{export_timeline, get_export_progress};
 use commands::recording::{
     RecordingManager,
-    get_available_microphones, get_available_webcams,
+    get_available_screens, get_available_microphones, get_available_webcams,
     start_recording, stop_recording, pause_recording, resume_recording,
     get_recording_state, import_recording_to_gallery, export_recording_to_file,
-    generate_recording_thumbnail,
+    generate_recording_thumbnail, check_screen_recording_permission, test_screen_recording_access,
+    test_recording_command,
 };
 use commands::app::init_app;
 
@@ -30,8 +31,12 @@ fn main() {
             read_binary_file,
             export_timeline,
             get_export_progress,
+            get_available_screens,
             get_available_microphones,
             get_available_webcams,
+            check_screen_recording_permission,
+            test_screen_recording_access,
+            test_recording_command,
             start_recording,
             stop_recording,
             pause_recording,
