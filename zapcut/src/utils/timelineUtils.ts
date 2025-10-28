@@ -7,8 +7,8 @@ import { Clip } from '../types/media';
 export function getActiveClipAtTime(clips: Clip[], time: number): Clip | null {
     // Filter clips that contain the current time
     const activeClips = clips.filter(clip => {
-        const clipStart = clip.startTime + clip.trimStart;
-        const clipEnd = clip.startTime + clip.trimEnd;
+        const clipStart = clip.startTime;
+        const clipEnd = clip.startTime + clip.duration;
         return time >= clipStart && time < clipEnd;
     });
 
@@ -24,11 +24,16 @@ export function getActiveClipAtTime(clips: Clip[], time: number): Clip | null {
 
 /**
  * Calculates the source time within a clip based on timeline time
- * Returns the time offset within the original media file
+ * Returns the time offset within the original media file (accounting for trim)
  */
 export function getSourceTimeInClip(clip: Clip, timelineTime: number): number {
-    const clipStart = clip.startTime + clip.trimStart;
-    return timelineTime - clipStart;
+    // Calculate how far into the clip we are on the timeline
+    const offsetInClip = timelineTime - clip.startTime;
+
+    // Add the trimStart to get the actual source time in the original media
+    const sourceTime = clip.trimStart + offsetInClip;
+
+    return sourceTime;
 }
 
 /**
@@ -37,7 +42,7 @@ export function getSourceTimeInClip(clip: Clip, timelineTime: number): number {
 export function getTimelineDuration(clips: Clip[]): number {
     if (clips.length === 0) return 0;
 
-    return Math.max(...clips.map(clip => clip.startTime + clip.trimEnd));
+    return Math.max(...clips.map(clip => clip.startTime + clip.duration));
 }
 
 /**

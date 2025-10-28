@@ -13,7 +13,7 @@ export function Timeline() {
     const containerRef = useRef<HTMLDivElement>(null);
     const [stageWidth, setStageWidth] = useState(1000);
 
-    const { tracks, zoom, currentTime, setZoom } = useTimelineStore();
+    const { tracks, zoom, currentTime, setZoom, selectedClipIds, removeClip } = useTimelineStore();
 
     // Resize stage to fit container
     useEffect(() => {
@@ -30,6 +30,25 @@ export function Timeline() {
 
         return () => window.removeEventListener('resize', updateSize);
     }, []);
+
+    // Handle keyboard shortcuts (backspace to delete selected clips)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Delete selected clips on backspace or delete key
+            if ((e.key === 'Backspace' || e.key === 'Delete') && selectedClipIds.length > 0) {
+                // Prevent default browser behavior (like navigating back)
+                e.preventDefault();
+
+                // Delete all selected clips
+                selectedClipIds.forEach((clipId) => {
+                    removeClip(clipId);
+                });
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedClipIds, removeClip]);
 
     const totalHeight = RULER_HEIGHT + tracks.length * TRACK_HEIGHT;
 
