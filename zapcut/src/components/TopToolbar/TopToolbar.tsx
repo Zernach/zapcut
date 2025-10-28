@@ -48,6 +48,7 @@ export const TopToolbar = () => {
                 className="flex items-center gap-2"
                 style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
             >
+                <img src="/zapcut-app-icon.jpg" alt="ZapCut" className="h-8 w-8 rounded" />
                 <h1 className="text-lg font-bold">ZapCut</h1>
             </div>
 
