@@ -3984,3 +3984,74 @@ After workflow completes, these files will be available:
 ---
 
 **End of Tasks & Checklists Document**
+
+---
+
+## Windows Build Fix (October 28, 2024)
+
+### Issue
+
+GitHub Actions Windows build was failing with compilation errors:
+```
+error[E0425]: cannot find function `kill` in crate `libc`
+error[E0425]: cannot find value `SIGKILL` in crate `libc`
+error[E0425]: cannot find value `SIGSTOP` in crate `libc`
+error[E0425]: cannot find value `SIGCONT` in crate `libc`
+```
+
+### Root Cause
+
+The `recording.rs` file was using Unix-specific functions (`libc::kill`) and signals (`SIGTERM`, `SIGKILL`, `SIGSTOP`, `SIGCONT`) which don't exist on Windows. These are POSIX-specific APIs not available in Windows.
+
+### Solution
+
+Added platform-specific conditional compilation:
+
+**Stop Recording**:
+- Unix/macOS/Linux: Use `libc::kill()` with `SIGTERM` for graceful shutdown, `SIGKILL` as fallback
+- Windows: Use Rust's cross-platform `Child::kill()` method
+
+**Pause/Resume Recording**:
+- Unix/macOS/Linux: Use `SIGSTOP` and `SIGCONT` signals
+- Windows: Return error message (not supported)
+
+### Changes Made
+
+✅ **Modified `src-tauri/src/commands/recording.rs`**:
+- Wrapped Unix signal code in `#[cfg(unix)]` blocks
+- Added Windows implementations with `#[cfg(windows)]` blocks  
+- Used `Child::kill()` for Windows process termination
+- Made pause/resume return descriptive error on Windows
+- Added `#[allow(unused_variables)]` to suppress warnings
+
+✅ **Updated documentation**:
+- Added platform-specific notes to `@docs/github-releases-guide.md`
+- Documented pause/resume limitation on Windows
+
+### Platform Support Matrix
+
+| Feature | macOS | Windows | Linux |
+|---------|-------|---------|-------|
+| Start Recording | ✅ | ✅* | ✅* |
+| Stop Recording | ✅ | ✅ | ✅ |
+| Pause Recording | ✅ | ❌ | ✅ |
+| Resume Recording | ✅ | ❌ | ✅ |
+
+*Note: Windows and Linux recording implementations are stubs returning mock data in current version. Screen recording is only fully implemented for macOS.
+
+### Testing
+
+- ✅ Code compiles on macOS
+- ⏳ Pending: Windows build test via GitHub Actions
+- ⏳ Pending: Linux build test via GitHub Actions
+
+### Future Improvements
+
+For full Windows recording support:
+- Implement Windows-specific screen capture using Graphics Capture API
+- Consider using a cross-platform pause mechanism (stop + resume from timestamp)
+- Or implement Windows job objects for process suspension
+
+---
+
+**End of Tasks & Checklists Document**

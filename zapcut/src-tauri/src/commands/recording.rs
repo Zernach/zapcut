@@ -332,6 +332,7 @@ pub async fn test_screen_recording_access() -> Result<String, String> {
 
 // Test the exact FFmpeg command that would be used for recording
 #[tauri::command]
+#[allow(unused_variables)]
 pub async fn test_recording_command(settings: RecordingSettings) -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
@@ -619,61 +620,108 @@ pub async fn stop_recording(manager: State<'_, RecordingManager>) -> Result<Reco
     
     eprintln!("[Recording] Stopping recording, output_file: {:?}", state.output_file);
     
-    // Terminate the recording process gracefully using SIGTERM
+    // Terminate the recording process gracefully
     let mut process_guard = manager.process.lock().await;
     if let Some(mut process) = process_guard.take() {
-        // Get the process ID for sending signals
-        let pid = process.id() as i32;
-        
-        // Send SIGTERM for graceful shutdown
-        unsafe {
-            libc::kill(pid, libc::SIGTERM);
-        }
-        
-        // Wait for the process to finish (with a timeout of 5 seconds)
-        let result = tokio::task::spawn_blocking(move || {
-            use std::time::Instant;
-            let start = Instant::now();
-            loop {
-                match process.try_wait() {
-                    Ok(Some(status)) => {
-                        eprintln!("FFmpeg process terminated with status: {}", status);
-                        
-                        // Check if FFmpeg exited successfully
-                        if !status.success() {
-                            eprintln!("[Recording] WARNING: FFmpeg exited with error code: {}", status.code().unwrap_or(-1));
-                            return Err(format!("FFmpeg recording failed with exit code: {}", status.code().unwrap_or(-1)));
-                        }
-                        
-                        // Wait additional time for file to be flushed to disk
-                        std::thread::sleep(std::time::Duration::from_millis(1000));
-                        return Ok(());
-                    },
-                    Ok(None) => {
-                        // Process still running
-                        if start.elapsed().as_secs() > 5 {
-                            eprintln!("FFmpeg process did not respond to SIGTERM, force killing");
-                            unsafe {
-                                libc::kill(pid, libc::SIGKILL);
+        #[cfg(unix)]
+        {
+            // Unix/Linux/macOS: Use signals for graceful shutdown
+            let pid = process.id() as i32;
+            
+            // Send SIGTERM for graceful shutdown
+            unsafe {
+                libc::kill(pid, libc::SIGTERM);
+            }
+            
+            // Wait for the process to finish (with a timeout of 5 seconds)
+            let result = tokio::task::spawn_blocking(move || {
+                use std::time::Instant;
+                let start = Instant::now();
+                loop {
+                    match process.try_wait() {
+                        Ok(Some(status)) => {
+                            eprintln!("FFmpeg process terminated with status: {}", status);
+                            
+                            // Check if FFmpeg exited successfully
+                            if !status.success() {
+                                eprintln!("[Recording] WARNING: FFmpeg exited with error code: {}", status.code().unwrap_or(-1));
+                                return Err(format!("FFmpeg recording failed with exit code: {}", status.code().unwrap_or(-1)));
                             }
-                            let _ = process.wait();
+                            
                             // Wait additional time for file to be flushed to disk
                             std::thread::sleep(std::time::Duration::from_millis(1000));
                             return Ok(());
+                        },
+                        Ok(None) => {
+                            // Process still running
+                            if start.elapsed().as_secs() > 5 {
+                                eprintln!("FFmpeg process did not respond to SIGTERM, force killing");
+                                unsafe {
+                                    libc::kill(pid, libc::SIGKILL);
+                                }
+                                let _ = process.wait();
+                                // Wait additional time for file to be flushed to disk
+                                std::thread::sleep(std::time::Duration::from_millis(1000));
+                                return Ok(());
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                        },
+                        Err(e) => {
+                            eprintln!("Error waiting for FFmpeg process: {}", e);
+                            return Err(format!("Error waiting for FFmpeg: {}", e));
                         }
-                        std::thread::sleep(std::time::Duration::from_millis(100));
-                    },
-                    Err(e) => {
-                        eprintln!("Error waiting for FFmpeg process: {}", e);
-                        return Err(format!("Error waiting for FFmpeg: {}", e));
                     }
                 }
+            }).await;
+            
+            if let Err(e) = result {
+                eprintln!("FFmpeg process error: {}", e);
+                return Err(format!("Recording failed: {}", e));
             }
-        }).await;
+        }
         
-        if let Err(e) = result {
-            eprintln!("FFmpeg process error: {}", e);
-            return Err(format!("Recording failed: {}", e));
+        #[cfg(windows)]
+        {
+            // Windows: Use Child::kill() for process termination
+            let result = tokio::task::spawn_blocking(move || {
+                use std::time::Instant;
+                let start = Instant::now();
+                
+                // On Windows, we can't gracefully signal FFmpeg, so we just kill it
+                // FFmpeg with -nostdin should finalize the file properly on kill
+                loop {
+                    match process.try_wait() {
+                        Ok(Some(status)) => {
+                            eprintln!("FFmpeg process terminated with status: {}", status);
+                            
+                            // Wait additional time for file to be flushed to disk
+                            std::thread::sleep(std::time::Duration::from_millis(1000));
+                            return Ok(());
+                        },
+                        Ok(None) => {
+                            // Process still running, wait a bit then kill
+                            if start.elapsed().as_millis() > 100 {
+                                eprintln!("Sending termination to FFmpeg process");
+                                let _ = process.kill();
+                                let _ = process.wait();
+                                // Wait additional time for file to be flushed to disk
+                                std::thread::sleep(std::time::Duration::from_millis(1000));
+                                return Ok(());
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        },
+                        Err(e) => {
+                            eprintln!("Error waiting for FFmpeg process: {}", e);
+                            return Err(format!("Error waiting for FFmpeg: {}", e));
+                        }
+                    }
+                }
+            }).await;
+            
+            if let Err(e) = result {
+                eprintln!("FFmpeg process error: {}", e);
+                return Err(format!("Recording failed: {}", e));
+            }
         }
     }
     
@@ -731,16 +779,25 @@ pub async fn pause_recording(manager: State<'_, RecordingManager>) -> Result<Rec
         return Err("Recording is already paused".to_string());
     }
     
-    // Send SIGSTOP to pause the process
-    let mut process_guard = manager.process.lock().await;
-    if let Some(ref mut process) = process_guard.as_mut() {
-        unsafe {
-            libc::kill(process.id() as i32, libc::SIGSTOP);
+    #[cfg(unix)]
+    {
+        // Unix/Linux/macOS: Use SIGSTOP to pause the process
+        let mut process_guard = manager.process.lock().await;
+        if let Some(ref mut process) = process_guard.as_mut() {
+            unsafe {
+                libc::kill(process.id() as i32, libc::SIGSTOP);
+            }
         }
+        
+        state.is_paused = true;
+        Ok(state.clone())
     }
     
-    state.is_paused = true;
-    Ok(state.clone())
+    #[cfg(windows)]
+    {
+        // Windows: Pause/resume not supported
+        Err("Pause/resume is not supported on Windows. Please stop and start a new recording instead.".to_string())
+    }
 }
 
 // Resume recording
@@ -756,16 +813,25 @@ pub async fn resume_recording(manager: State<'_, RecordingManager>) -> Result<Re
         return Err("Recording is not paused".to_string());
     }
     
-    // Send SIGCONT to resume the process
-    let mut process_guard = manager.process.lock().await;
-    if let Some(ref mut process) = process_guard.as_mut() {
-        unsafe {
-            libc::kill(process.id() as i32, libc::SIGCONT);
+    #[cfg(unix)]
+    {
+        // Unix/Linux/macOS: Use SIGCONT to resume the process
+        let mut process_guard = manager.process.lock().await;
+        if let Some(ref mut process) = process_guard.as_mut() {
+            unsafe {
+                libc::kill(process.id() as i32, libc::SIGCONT);
+            }
         }
+        
+        state.is_paused = false;
+        Ok(state.clone())
     }
     
-    state.is_paused = false;
-    Ok(state.clone())
+    #[cfg(windows)]
+    {
+        // Windows: Pause/resume not supported
+        Err("Pause/resume is not supported on Windows. Please stop and start a new recording instead.".to_string())
+    }
 }
 
 // Get current recording state
