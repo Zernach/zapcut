@@ -49,39 +49,157 @@ pub async fn export_timeline(clips: Vec<Clip>, config: ExportConfig) -> Result<S
         progress.error = None;
     }
 
-    // For MVP, we'll use FFmpeg concat demuxer for simple concatenation
-    // Create concat file list
+    // Create temp directory for intermediate files
     let temp_dir = std::env::temp_dir().join("zapcut");
     std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
 
-    let concat_file = temp_dir.join("concat_list.txt");
-    let mut concat_content = String::new();
-
-    // Sort clips by start_time
+    // Sort clips by start_time to maintain timeline order
     let mut sorted_clips = clips.clone();
     sorted_clips.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap());
-
-    // For MVP: Simple concatenation without complex trimming
-    for clip in sorted_clips {
-        concat_content.push_str(&format!("file '{}'\n", clip.file_path));
-    }
-
-    std::fs::write(&concat_file, concat_content).map_err(|e| e.to_string())?;
 
     // Update progress
     {
         let mut progress = EXPORT_PROGRESS.lock().unwrap();
         progress.percentage = 10.0;
-        progress.status = "encoding".to_string();
+        progress.status = "trimming clips".to_string();
     }
 
-    // Build FFmpeg command
     let ffmpeg_path = if cfg!(debug_assertions) {
         "ffmpeg"
     } else {
         "ffmpeg"
     };
 
+    // Step 1: Trim each clip and save as intermediate files
+    let mut trimmed_files = Vec::new();
+    let total_clips = sorted_clips.len();
+    
+    for (index, clip) in sorted_clips.iter().enumerate() {
+        let trimmed_file = temp_dir.join(format!("clip_{}.mp4", index));
+        
+        // Build FFmpeg command to extract trimmed segment
+        // -ss: start time in source (trimStart seconds from beginning)
+        // -t: duration to extract (the clip's playable duration)
+        let mut ffmpeg_args = vec![
+            "-ss".to_string(),
+            format!("{:.3}", clip.trim_start),
+            "-i".to_string(),
+            clip.file_path.clone(),
+            "-t".to_string(),
+            format!("{:.3}", clip.duration),
+        ];
+        
+        // Apply encoding settings based on config
+        if config.codec == "h264" {
+            ffmpeg_args.extend(vec![
+                "-c:v".to_string(),
+                "libx264".to_string(),
+            ]);
+        } else if config.codec == "h265" {
+            ffmpeg_args.extend(vec![
+                "-c:v".to_string(),
+                "libx265".to_string(),
+            ]);
+        }
+        
+        // Handle audio
+        if config.include_audio {
+            ffmpeg_args.extend(vec![
+                "-c:a".to_string(),
+                "aac".to_string(),
+            ]);
+        } else {
+            ffmpeg_args.extend(vec![
+                "-an".to_string(),
+            ]);
+        }
+        
+        // Add quality settings
+        let crf = match config.quality.as_str() {
+            "low" => "28",
+            "medium" => "23",
+            "high" => "18",
+            _ => "23",
+        };
+        ffmpeg_args.extend(vec![
+            "-crf".to_string(),
+            crf.to_string(),
+        ]);
+        
+        // Add resolution scaling if needed
+        if config.resolution != "source" {
+            let scale = match config.resolution.as_str() {
+                "720p" => "1280:720",
+                "1080p" => "1920:1080",
+                "1440p" => "2560:1440",
+                "4K" => "3840:2160",
+                _ => "1920:1080",
+            };
+            ffmpeg_args.extend(vec![
+                "-vf".to_string(),
+                format!("scale={}:force_original_aspect_ratio=decrease,pad={}:(ow-iw)/2:(oh-ih)/2", scale, scale),
+            ]);
+        }
+        
+        ffmpeg_args.extend(vec![
+            "-y".to_string(),
+            trimmed_file.to_str().unwrap().to_string(),
+        ]);
+        
+        let output = Command::new(ffmpeg_path)
+            .args(&ffmpeg_args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|e| format!("Failed to execute FFmpeg for clip {}: {}", index, e))?;
+        
+        if !output.status.success() {
+            let error_msg = String::from_utf8_lossy(&output.stderr).to_string();
+            let mut progress = EXPORT_PROGRESS.lock().unwrap();
+            progress.status = "error".to_string();
+            progress.error = Some(error_msg.clone());
+            
+            // Clean up any created files
+            for file in &trimmed_files {
+                let _ = std::fs::remove_file(file);
+            }
+            
+            return Err(format!("Failed to trim clip {}: {}", index, error_msg));
+        }
+        
+        trimmed_files.push(trimmed_file);
+        
+        // Update progress
+        let trim_progress = 10.0 + (index as f64 / total_clips as f64) * 40.0;
+        let mut progress = EXPORT_PROGRESS.lock().unwrap();
+        progress.percentage = trim_progress;
+    }
+
+    // Update progress
+    {
+        let mut progress = EXPORT_PROGRESS.lock().unwrap();
+        progress.percentage = 50.0;
+        progress.status = "concatenating".to_string();
+    }
+
+    // Step 2: Create concat file for trimmed clips
+    let concat_file = temp_dir.join("concat_list.txt");
+    let mut concat_content = String::new();
+    
+    for file in &trimmed_files {
+        concat_content.push_str(&format!("file '{}'\n", file.to_str().unwrap()));
+    }
+    
+    std::fs::write(&concat_file, concat_content).map_err(|e| e.to_string())?;
+
+    // Update progress
+    {
+        let mut progress = EXPORT_PROGRESS.lock().unwrap();
+        progress.percentage = 60.0;
+        progress.status = "finalizing".to_string();
+    }
+
+    // Step 3: Concatenate all trimmed clips
     let output = Command::new(ffmpeg_path)
         .args(&[
             "-f",
@@ -98,14 +216,21 @@ pub async fn export_timeline(clips: Vec<Clip>, config: ExportConfig) -> Result<S
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
-        .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
+        .map_err(|e| format!("Failed to execute FFmpeg for concatenation: {}", e))?;
 
     if !output.status.success() {
         let error_msg = String::from_utf8_lossy(&output.stderr).to_string();
         let mut progress = EXPORT_PROGRESS.lock().unwrap();
         progress.status = "error".to_string();
         progress.error = Some(error_msg.clone());
-        return Err(format!("Export failed: {}", error_msg));
+        
+        // Clean up
+        for file in &trimmed_files {
+            let _ = std::fs::remove_file(file);
+        }
+        let _ = std::fs::remove_file(&concat_file);
+        
+        return Err(format!("Export failed during concatenation: {}", error_msg));
     }
 
     // Update progress to complete
@@ -115,7 +240,10 @@ pub async fn export_timeline(clips: Vec<Clip>, config: ExportConfig) -> Result<S
         progress.status = "complete".to_string();
     }
 
-    // Clean up
+    // Clean up temporary files
+    for file in &trimmed_files {
+        let _ = std::fs::remove_file(file);
+    }
     let _ = std::fs::remove_file(&concat_file);
 
     Ok(config.output_path)
