@@ -10,10 +10,11 @@ export interface Clip {
     id: string;
     name: string;
     filePath: string;
-    duration: number; // seconds
+    duration: number; // seconds (current playable duration on timeline)
+    originalDuration: number; // original media duration (for trim constraints)
     startTime: number; // position on timeline
-    trimStart: number; // trim in point
-    trimEnd: number; // trim out point
+    trimStart: number; // trim in point (seconds from start)
+    trimEnd: number; // trim out point (seconds from end)
     trackIndex: number; // which track
     width: number;
     height: number;
