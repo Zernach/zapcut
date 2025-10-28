@@ -70,6 +70,17 @@ npm run tauri:build
 
 The packaged app will be in `src-tauri/target/release/bundle/`.
 
+## Releases
+
+Automated releases are configured via GitHub Actions. To create a new release:
+
+1. Update version numbers in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`
+2. Commit and tag: `git tag v0.2.0 && git push origin v0.2.0`
+3. GitHub Actions will automatically build for macOS, Windows, and Linux
+4. Published builds will be available at https://github.com/Zernach/zapcut/releases
+
+For detailed release instructions, see `@docs/github-releases-guide.md`.
+
 ## Usage
 
 ### Import Videos
