@@ -126,101 +126,52 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-      - name: Rename artifacts to user-friendly names
+      - name: Rename release assets to user-friendly names
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          cd zapcut/target/release/bundle
+          PLATFORM="${{ matrix.platform }}"
+          FRIENDLY_NAME="${{ matrix.friendly_name }}"
+          TAG="${{ github.ref_name }}"
           
-          # Get version from tag (remove 'v' prefix)
-          VERSION="${{ github.ref_name }}"
-          VERSION="${VERSION#v}"
-          
-          # Rename based on platform
-          if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
-            # macOS DMG files
-            if [ -d "dmg" ]; then
-              cd dmg
-              for file in *.dmg; do
-                if [ -f "$file" ]; then
-                  # Replace architecture names with friendly names
-                  newname=$(echo "$file" | sed "s/_aarch64/_${{ matrix.friendly_name }}/g" | sed "s/_x64/_${{ matrix.friendly_name }}/g")
-                  if [ "$file" != "$newname" ]; then
-                    mv "$file" "$newname"
-                    echo "Renamed: $file -> $newname"
-                  fi
-                fi
-              done
-              cd ..
-            fi
-            # macOS app bundles
-            if [ -d "macos" ]; then
-              cd macos
-              for file in *.app.tar.gz; do
-                if [ -f "$file" ]; then
-                  newname=$(echo "$file" | sed "s/_aarch64/_${{ matrix.friendly_name }}/g" | sed "s/_x64/_${{ matrix.friendly_name }}/g")
-                  if [ "$file" != "$newname" ]; then
-                    mv "$file" "$newname"
-                    echo "Renamed: $file -> $newname"
-                  fi
-                fi
-              done
-              cd ..
-            fi
-          elif [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
-            # Linux files
-            if [ -d "deb" ]; then
-              cd deb
-              for file in *.deb; do
-                if [ -f "$file" ]; then
-                  newname=$(echo "$file" | sed "s/_amd64/_${{ matrix.friendly_name }}/g")
-                  if [ "$file" != "$newname" ]; then
-                    mv "$file" "$newname"
-                    echo "Renamed: $file -> $newname"
-                  fi
-                fi
-              done
-              cd ..
-            fi
-            if [ -d "appimage" ]; then
-              cd appimage
-              for file in *.AppImage; do
-                if [ -f "$file" ]; then
-                  newname=$(echo "$file" | sed "s/_amd64/_${{ matrix.friendly_name }}/g")
-                  if [ "$file" != "$newname" ]; then
-                    mv "$file" "$newname"
-                    echo "Renamed: $file -> $newname"
-                  fi
-                fi
-              done
-              cd ..
-            fi
-          elif [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
-            # Windows files
-            if [ -d "nsis" ]; then
-              cd nsis
-              for file in *.exe; do
-                if [ -f "$file" ]; then
-                  newname=$(echo "$file" | sed "s/_x64-setup/_${{ matrix.friendly_name }}-setup/g")
-                  if [ "$file" != "$newname" ]; then
-                    mv "$file" "$newname"
-                    echo "Renamed: $file -> $newname"
-                  fi
-                fi
-              done
-              cd ..
-            fi
-            if [ -d "msi" ]; then
-              cd msi
-              for file in *.msi; do
-                if [ -f "$file" ]; then
-                  newname=$(echo "$file" | sed "s/_x64/_${{ matrix.friendly_name }}/g")
-                  if [ "$file" != "$newname" ]; then
-                    mv "$file" "$newname"
-                    echo "Renamed: $file -> $newname"
-                  fi
-                fi
-              done
-              cd ..
-            fi
+          # Determine patterns for sed based on platform
+          if [[ "$PLATFORM" == "macos-latest" ]]; then
+            # macOS renaming
+            PATTERN1="s/_aarch64/_${FRIENDLY_NAME}/g"
+            PATTERN2="s/_x64/_${FRIENDLY_NAME}/g"
+          elif [[ "$PLATFORM" == "ubuntu-22.04" ]]; then
+            # Linux renaming
+            PATTERN1="s/_amd64/_${FRIENDLY_NAME}/g"
+          elif [[ "$PLATFORM" == "windows-latest" ]]; then
+            # Windows renaming
+            PATTERN1="s/_x64-setup/_${FRIENDLY_NAME}-setup/g"
+            PATTERN2="s/_x64_/_${FRIENDLY_NAME}_/g"
           fi
+          
+          # Get assets and rename them
+          gh release view "$TAG" --json assets -q '.assets[].name' | while read ASSET_NAME; do
+            NEW_NAME="$ASSET_NAME"
+            
+            # Apply patterns
+            if [[ ! -z "$PATTERN1" ]]; then
+              NEW_NAME=$(echo "$NEW_NAME" | sed "$PATTERN1")
+            fi
+            if [[ ! -z "$PATTERN2" ]]; then
+              NEW_NAME=$(echo "$NEW_NAME" | sed "$PATTERN2")
+            fi
+            
+            # Update the asset name if it changed
+            if [[ "$NEW_NAME" != "$ASSET_NAME" ]]; then
+              echo "Renaming: $ASSET_NAME -> $NEW_NAME"
+              # Use GitHub API to update asset name
+              ASSET_ID=$(gh release view "$TAG" --json assets -q ".assets[] | select(.name==\"$ASSET_NAME\") | .id")
+              curl -X PATCH \
+                -H "Authorization: token $GH_TOKEN" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/releases/assets/$ASSET_ID" \
+                -d "{\"name\":\"$NEW_NAME\"}"
+              echo "✓ Renamed to: $NEW_NAME"
+            fi
+          done
 
