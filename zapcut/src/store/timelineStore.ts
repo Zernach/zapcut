@@ -8,6 +8,7 @@ interface TimelineStore {
     currentTime: number;
     zoom: number;
     selectedClipIds: string[];
+    snapLinePosition: number | null;
 
     addClip: (clip: Clip) => void;
     removeClip: (id: string) => void;
@@ -17,6 +18,7 @@ interface TimelineStore {
     selectClip: (id: string, multi?: boolean) => void;
     clearSelection: () => void;
     getDuration: () => number;
+    setSnapLinePosition: (position: number | null) => void;
 }
 
 export const useTimelineStore = create<TimelineStore>((set, get) => ({
@@ -28,6 +30,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     currentTime: 0,
     zoom: 20, // 20 pixels per second default
     selectedClipIds: [],
+    snapLinePosition: null,
 
     addClip: (clip) =>
         set((state) => ({
@@ -74,5 +77,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
         if (state.clips.length === 0) return 0;
         return Math.max(...state.clips.map((c) => c.startTime + c.duration));
     },
+
+    setSnapLinePosition: (position) => set({ snapLinePosition: position }),
 }));
 

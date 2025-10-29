@@ -2,10 +2,69 @@
 ## Comprehensive Task Breakdown
 
 **Version:** 1.0  
-**Last Updated:** October 28, 2025  
+**Last Updated:** October 29, 2025  
 **Status:** Planning Phase  
 **Website:** https://zapcut.archlife.org  
 **Repository:** https://github.com/Zernach/zapcut
+
+---
+
+## Recent Updates
+
+### October 29, 2025 - Screen Recording Migration to Browser APIs
+**Status:** ✅ Completed
+
+Migrated screen recording from FFmpeg/AVFoundation to browser-based capture using `navigator.mediaDevices.getDisplayMedia()`:
+
+**Changes Made:**
+- ✅ Refactored `useRecording.ts` to use MediaStream APIs
+- ✅ Created `process_recording` Tauri command for WebM → MP4 re-encoding
+- ✅ Simplified `RecordingManager` (removed FFmpeg process management)
+- ✅ Updated `RecordingControls.tsx` UI (removed screen selector, pause/resume, permission checks)
+- ✅ Updated command registration in `main.rs`
+- ✅ Updated types (removed `screen_device` and `is_paused` fields)
+- ✅ Updated documentation in PRD
+
+**Benefits:**
+- No system permissions required (browser handles prompts)
+- Cross-platform support without OS-specific code
+- Native browser screen picker with preview
+- Simplified codebase (removed ~600 lines of complex permission handling)
+
+**Testing Required:**
+1. **Start Recording**
+   - Run `npm run tauri dev`
+   - Navigate to Record tab
+   - Click "Start Recording"
+   - Browser should prompt for screen/window selection
+   - Select a screen/window and click "Share"
+   - Verify recording indicator shows "Recording" status
+
+2. **Stop Recording**
+   - Click "Stop" button
+   - Wait for processing (WebM → MP4 conversion)
+   - Verify output file path appears
+   - Check recording preview loads
+
+3. **Microphone Audio**
+   - Enable "Enable Microphone" checkbox before recording
+   - Start and stop recording
+   - Verify audio is present in output file
+
+4. **Webcam (Partial Implementation)**
+   - Enable "Enable Webcam" checkbox
+   - Note: Full PiP composition not yet implemented
+   - Should request webcam permission
+
+5. **Import to Gallery**
+   - After recording completes, click "Import to Gallery"
+   - Verify file copies to exports directory
+   - Check success message appears
+
+**Known Limitations:**
+- Webcam picture-in-picture composition not fully implemented (future enhancement)
+- Pause/resume functionality removed (simplified to start/stop only)
+- Screen selection handled by browser (no dropdown needed)
 
 ---
 

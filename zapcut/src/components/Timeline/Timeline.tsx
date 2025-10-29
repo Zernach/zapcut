@@ -4,6 +4,7 @@ import { useTimelineStore } from '../../store/timelineStore';
 import { TimeRuler } from './TimeRuler';
 import { Track } from './Track';
 import { Playhead } from './Playhead';
+import { SnapLine } from './SnapLine';
 import { ZoomIn, ZoomOut } from 'lucide-react';
 
 const RULER_HEIGHT = 30;
@@ -101,6 +102,9 @@ export function Timeline() {
                                 zoom={zoom}
                             />
                         ))}
+
+                        {/* Snap line (rendered above clips but below playhead) */}
+                        <SnapLine height={totalHeight} zoom={zoom} />
 
                         {/* Playhead */}
                         <Playhead currentTime={currentTime} height={totalHeight} zoom={zoom} />

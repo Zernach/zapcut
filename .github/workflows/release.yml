@@ -129,7 +129,7 @@ jobs:
       - name: Rename artifacts to user-friendly names
         shell: bash
         run: |
-          cd zapcut/src-tauri/target/release/bundle
+          cd zapcut/target/release/bundle
           
           # Get version from tag (remove 'v' prefix)
           VERSION="${{ github.ref_name }}"

@@ -105,12 +105,27 @@
 
 #### Backend Layer (Rust via Tauri)
 - **Desktop Framework**: Tauri 2.x
-- **Media Processing**: FFmpeg (invoked via Tauri commands)
+- **Media Processing**: FFmpeg (invoked via Tauri commands for re-encoding)
 - **Screen Capture**:
-  - macOS: AVFoundation APIs
-  - Windows: Windows.Graphics.Capture API
+  - Browser: `navigator.mediaDevices.getDisplayMedia()` (cross-platform)
+  - MediaRecorder API for WebM capture
+  - Backend FFmpeg re-encodes WebM to MP4 for consistency
 - **File System**: Tauri's fs module with proper permissions
 - **IPC**: Tauri's command system for frontend-backend communication
+
+#### Recording Architecture (Updated)
+**Hybrid Browser + Backend Approach:**
+1. Frontend uses `getDisplayMedia()` to capture screen (browser handles permissions)
+2. MediaRecorder encodes to WebM format in real-time
+3. On stop, WebM chunks sent to Rust backend
+4. Backend uses FFmpeg to re-encode WebM → MP4 (better compression, universal compatibility)
+5. Final MP4 saved to recordings directory
+
+**Benefits:**
+- No system permissions required (browser handles prompts)
+- Cross-platform without OS-specific code
+- Native browser screen picker with preview
+- FFmpeg still used for quality and format consistency
 
 #### Media Processing Pipeline
 ```
@@ -2679,29 +2694,32 @@ Prefer composing components over complex prop APIs:
 #### FR-5.1: Screen Recording
 - **Requirement**: Capture full screen, window, or region
 - **Implementation**:
-  - macOS: AVFoundation SCScreenshotManager
-  - Windows: Windows.Graphics.Capture API
-  - Selection dialog before recording
-  - Indicator during recording (recording icon)
-  - Save to temporary file, import to media library
+  - Browser: `navigator.mediaDevices.getDisplayMedia()` API
+  - Native browser screen picker (cross-platform)
+  - No system permissions required (browser handles prompts)
+  - MediaRecorder API for WebM capture
+  - Backend FFmpeg re-encoding to MP4 for consistency
+  - Save to recordings directory, import to media library
 - **Acceptance Criteria**:
   - 30fps minimum capture rate
   - No dropped frames on modern hardware
-  - Recording indicator visible
-  - Output file valid and importable
+  - Recording indicator visible in browser
+  - Output file valid MP4 and importable
+  - Works on macOS, Windows, and Linux
 
 #### FR-5.2: Webcam Recording
 - **Requirement**: Capture from system camera
 - **Implementation**:
-  - getUserMedia() API in frontend
+  - `navigator.mediaDevices.getUserMedia()` API in frontend
+  - Browser's `enumerateDevices()` for device selection
   - Camera selection dropdown
-  - Resolution selection (720p, 1080p)
-  - MediaRecorder API for encoding
+  - Resolution: 1280x720 default
+  - Combined with screen capture via MediaRecorder
 - **Acceptance Criteria**:
   - Camera list populates correctly
-  - Preview before recording starts
+  - Browser permission prompt handles access
   - Recording starts within 1 second
-  - Output file valid MP4/WebM
+  - Output file valid MP4
 
 #### FR-5.3: Simultaneous Screen + Webcam
 - **Requirement**: Picture-in-picture recording mode
@@ -2719,10 +2737,11 @@ Prefer composing components over complex prop APIs:
 #### FR-5.4: Audio Capture
 - **Requirement**: Record microphone and/or system audio
 - **Implementation**:
-  - getUserMedia() for microphone
-  - System audio capture (OS-specific APIs)
-  - Audio source selection dropdown
-  - Volume meter during recording
+  - `navigator.mediaDevices.getUserMedia()` for microphone
+  - Browser permission prompts handle access
+  - Audio source selection via `enumerateDevices()`
+  - Combined with display stream in MediaRecorder
+  - System audio capture via browser (when user selects tab/window audio)
 - **Acceptance Criteria**:
   - Audio sources detected correctly
   - No audio desync with video

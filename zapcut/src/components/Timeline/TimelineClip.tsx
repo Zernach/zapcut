@@ -5,6 +5,7 @@ import { Clip } from '../../types/media';
 import { useTimelineStore } from '../../store/timelineStore';
 import { COLORS } from '../../constants/colors';
 import { KonvaEventObject } from 'konva/lib/Node';
+import { calculateSnapPoint } from '../../utils/timelineUtils';
 
 interface TimelineClipProps {
     clip: Clip;
@@ -22,7 +23,7 @@ interface TrimState {
 }
 
 export function TimelineClip({ clip, zoom, trackHeight }: TimelineClipProps) {
-    const { selectedClipIds, selectClip, updateClip } = useTimelineStore();
+    const { selectedClipIds, selectClip, updateClip, clips, setSnapLinePosition } = useTimelineStore();
     const groupRef = useRef<Konva.Group>(null);
 
     // Trim drag state
@@ -68,8 +69,53 @@ export function TimelineClip({ clip, zoom, trackHeight }: TimelineClipProps) {
 
     const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
         if (isDraggingTrim) return;
-        const newStartTime = Math.max(0, e.target.x() / zoom);
-        updateClip(clip.id, { startTime: newStartTime });
+
+        // Calculate proposed position
+        const proposedStartTime = Math.max(0, e.target.x() / zoom);
+
+        // Check for snap point
+        const snapResult = calculateSnapPoint(
+            proposedStartTime,
+            clip.id,
+            clip.trackIndex,
+            clips,
+            zoom
+        );
+
+        // Use snapped position if available, otherwise use proposed position
+        const finalStartTime = snapResult ? snapResult.snapTime : proposedStartTime;
+
+        updateClip(clip.id, { startTime: finalStartTime });
+
+        // Clear snap line
+        setSnapLinePosition(null);
+    };
+
+    const handleDragMove = (e: KonvaEventObject<DragEvent>) => {
+        if (isDraggingTrim) return;
+
+        // Constrain vertical movement
+        e.target.y(y);
+
+        // Calculate proposed position
+        const proposedStartTime = Math.max(0, e.target.x() / zoom);
+
+        // Check for snap point and show snap line
+        const snapResult = calculateSnapPoint(
+            proposedStartTime,
+            clip.id,
+            clip.trackIndex,
+            clips,
+            zoom
+        );
+
+        if (snapResult) {
+            setSnapLinePosition(snapResult.snapLinePosition);
+            // Snap the visual position during drag
+            e.target.x(snapResult.snapTime * zoom);
+        } else {
+            setSnapLinePosition(null);
+        }
     };
 
     // Get mouse position relative to stage
@@ -226,10 +272,7 @@ export function TimelineClip({ clip, zoom, trackHeight }: TimelineClipProps) {
             draggable={!isDraggingTrim}
             onClick={handleClick}
             onDragEnd={handleDragEnd}
-            onDragMove={(e) => {
-                // Constrain vertical movement
-                e.target.y(y);
-            }}
+            onDragMove={handleDragMove}
             onMouseMove={handleTrimMouseMove}
             onMouseUp={handleTrimMouseUp}
             onMouseLeave={handleTrimMouseUp}
