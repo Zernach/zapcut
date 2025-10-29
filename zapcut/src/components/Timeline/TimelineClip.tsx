@@ -291,12 +291,12 @@ export function TimelineClip({ clip, zoom, trackHeight }: TimelineClipProps) {
 
             {/* Clip name */}
             <Text
-                x={8}
+                x={12}
                 y={8}
-                width={Math.max(0, width - 16)}
+                width={Math.max(0, width - 24)}
                 text={clip.name}
                 fontSize={12}
-                fill={COLORS.textPrimary}
+                fill={isSelected ? '#000000' : COLORS.textPrimary}
                 ellipsis={true}
                 fontFamily="sans-serif"
             />

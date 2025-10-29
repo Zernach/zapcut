@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { Stage, Layer } from 'react-konva';
 import { useTimelineStore } from '../../store/timelineStore';
+import { useMediaStore } from '../../store/mediaStore';
 import { TimeRuler } from './TimeRuler';
 import { Track } from './Track';
 import { Playhead } from './Playhead';
@@ -15,6 +16,7 @@ export function Timeline() {
     const [stageWidth, setStageWidth] = useState(1000);
 
     const { tracks, zoom, currentTime, setZoom, selectedClipIds, removeClip, clearSelection } = useTimelineStore();
+    const selectItem = useMediaStore((state) => state.selectItem);
 
     // Resize stage to fit container
     useEffect(() => {
@@ -65,6 +67,7 @@ export function Timeline() {
         // Only clear selection if clicking on the stage itself (not on any shape)
         if (e.target === e.target.getStage()) {
             clearSelection();
+            selectItem(null); // Also deselect media
         }
     };
 

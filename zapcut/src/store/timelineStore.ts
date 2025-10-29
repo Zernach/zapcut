@@ -19,6 +19,7 @@ interface TimelineStore {
     clearSelection: () => void;
     getDuration: () => number;
     setSnapLinePosition: (position: number | null) => void;
+    splitClipAtTime: (clipId: string, splitTime: number) => void;
 }
 
 export const useTimelineStore = create<TimelineStore>((set, get) => ({
@@ -28,7 +29,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
         { id: 'track-1', type: 'overlay', locked: false, visible: true, clips: [] },
     ],
     currentTime: 0,
-    zoom: 20, // 20 pixels per second default
+    zoom: 42, // 42 pixels per second default
     selectedClipIds: [],
     snapLinePosition: null,
 
@@ -79,5 +80,66 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     },
 
     setSnapLinePosition: (position) => set({ snapLinePosition: position }),
+
+    splitClipAtTime: (clipId, splitTime) =>
+        set((state) => {
+            const clip = state.clips.find((c) => c.id === clipId);
+            if (!clip) return state;
+
+            // Check if split time is within the clip's bounds
+            const clipEndTime = clip.startTime + clip.duration;
+            if (splitTime <= clip.startTime || splitTime >= clipEndTime) {
+                return state;
+            }
+
+            // Calculate the split point relative to the clip's start
+            const splitOffset = splitTime - clip.startTime;
+
+            // Create the first clip (from start to split point)
+            const firstClip: Clip = {
+                ...clip,
+                id: `${clip.id}-split-1-${Date.now()}`,
+                duration: splitOffset,
+                trimEnd: clip.trimEnd + (clip.duration - splitOffset),
+            };
+
+            // Create the second clip (from split point to end)
+            const secondClip: Clip = {
+                ...clip,
+                id: `${clip.id}-split-2-${Date.now()}`,
+                startTime: splitTime,
+                duration: clip.duration - splitOffset,
+                trimStart: clip.trimStart + splitOffset,
+            };
+
+            // Replace the original clip with the two new clips
+            const newClips = state.clips
+                .filter((c) => c.id !== clipId)
+                .concat([firstClip, secondClip]);
+
+            // Update tracks to replace the old clip ID with the new ones
+            const newTracks = state.tracks.map((track) => {
+                if (track.id === `track-${clip.trackIndex}`) {
+                    return {
+                        ...track,
+                        clips: track.clips.flatMap((cId) =>
+                            cId === clipId ? [firstClip.id, secondClip.id] : [cId]
+                        ),
+                    };
+                }
+                return track;
+            });
+
+            // Update selection to select both new clips
+            const newSelectedClipIds = state.selectedClipIds
+                .filter((id) => id !== clipId)
+                .concat([firstClip.id, secondClip.id]);
+
+            return {
+                clips: newClips,
+                tracks: newTracks,
+                selectedClipIds: newSelectedClipIds,
+            };
+        }),
 }));
 

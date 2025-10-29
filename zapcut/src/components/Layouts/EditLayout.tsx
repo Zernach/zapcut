@@ -11,8 +11,14 @@ interface EditLayoutProps {
 export const EditLayout = ({ onExportClick }: EditLayoutProps) => {
     const selectedItemId = useMediaStore((state) => state.selectedItemId);
     const items = useMediaStore((state) => state.items);
+    const selectItem = useMediaStore((state) => state.selectItem);
 
     const selectedItem = items.find((item) => item.id === selectedItemId);
+
+    const handleClickOutsideMedia = () => {
+        // Deselect media when clicking outside the media library
+        selectItem(null);
+    };
 
     return (
         <div className="flex-1 flex overflow-hidden">
@@ -22,7 +28,7 @@ export const EditLayout = ({ onExportClick }: EditLayoutProps) => {
             </div>
 
             {/* Center: Player and Timeline */}
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col" onClick={handleClickOutsideMedia}>
                 {/* Video player */}
                 <div className="flex-1 min-h-0">
                     <VideoPlayer src={selectedItem?.filePath} />

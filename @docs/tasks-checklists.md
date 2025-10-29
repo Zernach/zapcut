@@ -10,6 +10,39 @@
 
 ## Recent Updates
 
+### October 29, 2025 - Speed Control for Timeline Clips
+**Status:** ✅ Completed
+
+Added real-time speed adjustment for clips in the timeline with live duration feedback:
+
+**Changes Made:**
+- ✅ Added `speed` property to `Clip` type (range: 0.25x - 4.0x)
+- ✅ Created interactive speed slider in `SelectedClipToolbox` component
+- ✅ Implemented real-time duration calculation based on speed multiplier
+- ✅ Updated clip duration on timeline as slider is dragged
+- ✅ Added speed reset button to quickly return to 1.0x
+- ✅ Updated export functionality to apply speed using FFmpeg filters
+- ✅ Implemented video speed using `setpts` filter
+- ✅ Implemented audio speed using chained `atempo` filters for full range support
+- ✅ Added custom slider styling with gradient progress indicator
+
+**Features:**
+- Speed range: 0.25x (slow motion) to 4.0x (fast forward)
+- Real-time visual feedback on timeline
+- Smooth slider with 0.05x increments
+- Displays current speed multiplier (e.g., "2.00x")
+- Clip duration automatically adjusts based on speed
+- Export properly applies speed to both video and audio tracks
+
+**Technical Details:**
+- Video: Uses FFmpeg `setpts` filter with formula `setpts=(1/speed)*PTS`
+- Audio: Chains multiple `atempo` filters for speeds outside 0.5-2.0 range
+- Duration calculation: `newDuration = baseDuration / speed`
+- Base duration accounts for trim start/end
+- Local state for smooth slider interaction with store updates
+
+---
+
 ### October 29, 2025 - Live Preview for All Recording Modes
 **Status:** ✅ Completed
 

@@ -1,8 +1,10 @@
 import { useRef, useEffect, useState } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTimelineStore } from '../../store/timelineStore';
+import { useMediaStore } from '../../store/mediaStore';
 import { invoke } from '@tauri-apps/api/core';
 import { getActiveClipAtTime, getSourceTimeInClip, getTimelineDuration, hasTimelineContent } from '../../utils/timelineUtils';
+import { Plus, Check } from 'lucide-react';
 
 interface VideoPlayerProps {
     src?: string;
@@ -12,6 +14,7 @@ interface VideoPlayerProps {
 export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [videoBlobUrl, setVideoBlobUrl] = useState<string | null>(null);
+    const [showAddedFeedback, setShowAddedFeedback] = useState(false);
     const {
         currentTime,
         isPlaying,
@@ -23,6 +26,12 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
     } = usePlayerStore();
 
     const clips = useTimelineStore((state) => state.clips);
+    const addClip = useTimelineStore((state) => state.addClip);
+    const getDuration = useTimelineStore((state) => state.getDuration);
+
+    const selectedItemId = useMediaStore((state) => state.selectedItemId);
+    const items = useMediaStore((state) => state.items);
+    const selectedItem = items.find((item) => item.id === selectedItemId);
 
     // Determine which clip should be playing at current time
     const activeClip = getActiveClipAtTime(clips, currentTime);
@@ -260,14 +269,73 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
     const shouldShowVideo = activeClip || (!hasContent && src);
     const displayMessage = hasContent && !activeClip ? 'No content at current time' : 'No video selected';
 
-    // Clear timeline clip selection when clicking on video player
+    // Clear timeline clip selection and deselect media when clicking on video player
     const clearSelection = useTimelineStore((state) => state.clearSelection);
+    const selectMediaItem = useMediaStore((state) => state.selectItem);
     const handleClick = () => {
         clearSelection();
+        selectMediaItem(null);
+    };
+
+    // Handle adding selected media item to timeline
+    const handleAddToTimeline = (e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent click from bubbling to video player
+        if (!selectedItem) return;
+        const currentDuration = getDuration();
+        const clip = {
+            id: `clip-${Date.now()}`,
+            name: selectedItem.name,
+            filePath: selectedItem.filePath,
+            duration: selectedItem.duration,
+            originalDuration: selectedItem.duration,
+            startTime: currentDuration,
+            trimStart: 0,
+            trimEnd: 0,
+            trackIndex: 0,
+            width: selectedItem.width,
+            height: selectedItem.height,
+            fps: selectedItem.fps,
+            thumbnailPath: selectedItem.thumbnailPath,
+            metadata: {
+                codec: selectedItem.codec,
+                bitrate: 0,
+                fileSize: selectedItem.fileSize,
+                createdAt: new Date(),
+            },
+            speed: 1.0,
+        };
+        addClip(clip);
+
+        // Show "Added!" feedback
+        setShowAddedFeedback(true);
+        setTimeout(() => {
+            setShowAddedFeedback(false);
+        }, 1000);
+
+        selectMediaItem(null); // Deselect media after adding to timeline
     };
 
     return (
         <div className="relative w-full h-full bg-black flex items-center justify-center" onClick={handleClick}>
+            {/* Add to Timeline Button - Only visible when media library item is selected */}
+            {selectedItem && (
+                <button
+                    onClick={handleAddToTimeline}
+                    className="absolute top-4 left-4 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm flex items-center gap-2 transition-colors z-10 shadow-lg"
+                >
+                    <Plus size={16} />
+                    Add to Timeline
+                </button>
+            )}
+
+            {/* "Added!" feedback message */}
+            {showAddedFeedback && (
+                <div className="absolute top-4 left-4 px-3 py-1.5 bg-transparent rounded text-sm flex items-center gap-1.5 z-10 text-green-400 font-medium">
+                    <Check size={16} />
+                    Added!
+                </div>
+            )}
+
             {shouldShowVideo ? (
                 <video ref={videoRef} className="max-w-full max-h-full" autoPlay={autoPlay} />
             ) : (

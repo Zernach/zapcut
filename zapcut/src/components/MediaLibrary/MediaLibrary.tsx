@@ -12,12 +12,18 @@ interface MediaLibraryProps {
 
 export function MediaLibrary({ onExportClick }: MediaLibraryProps) {
     const items = useMediaStore((state) => state.items);
+    const selectItem = useMediaStore((state) => state.selectItem);
     const clearSelection = useTimelineStore((state) => state.clearSelection);
     const { importFromFilePicker, isImporting } = useMediaImport();
 
-    const handleClick = () => {
+    const handleContainerClick = (e: React.MouseEvent) => {
+        // Stop propagation to prevent deselecting media when clicking inside the library
+        e.stopPropagation();
         // Clear timeline clip selection when clicking in media library
         clearSelection();
+        // Clear media selection when clicking anywhere in the container
+        // (MediaItem components stop propagation, so this only fires when not clicking items)
+        selectItem(null);
     };
 
     const handleImportClick = (e: React.MouseEvent) => {
@@ -31,7 +37,7 @@ export function MediaLibrary({ onExportClick }: MediaLibraryProps) {
     };
 
     return (
-        <div className="h-full flex flex-col bg-panel" onClick={handleClick}>
+        <div className="h-full flex flex-col bg-panel" onClick={handleContainerClick}>
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-border">
                 <h2 className="text-lg font-semibold">Media</h2>

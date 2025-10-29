@@ -21,6 +21,7 @@ export interface Clip {
     fps: number;
     thumbnailPath?: string;
     metadata: ClipMetadata;
+    speed: number; // playback speed multiplier (default: 1.0, range: 0.25 - 4.0)
 }
 
 export interface MediaItem {

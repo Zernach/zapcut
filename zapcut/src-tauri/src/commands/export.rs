@@ -23,6 +23,7 @@ pub struct Clip {
     pub trim_start: f64,
     pub trim_end: f64,
     pub duration: f64,
+    pub speed: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -132,6 +133,17 @@ pub async fn export_timeline(clips: Vec<Clip>, config: ExportConfig) -> Result<S
             crf.to_string(),
         ]);
         
+        // Build video filter chain
+        let mut video_filters = Vec::new();
+        
+        // Add speed adjustment if not 1.0
+        if (clip.speed - 1.0).abs() > 0.001 {
+            // setpts filter: speed up or slow down video
+            // For speed > 1.0 (faster): multiply PTS by 1/speed
+            // For speed < 1.0 (slower): multiply PTS by 1/speed
+            video_filters.push(format!("setpts={}*PTS", 1.0 / clip.speed));
+        }
+        
         // Add resolution scaling if needed
         if config.resolution != "source" {
             let scale = match config.resolution.as_str() {
@@ -141,10 +153,43 @@ pub async fn export_timeline(clips: Vec<Clip>, config: ExportConfig) -> Result<S
                 "4K" => "3840:2160",
                 _ => "1920:1080",
             };
+            video_filters.push(format!("scale={}:force_original_aspect_ratio=decrease,pad={}:(ow-iw)/2:(oh-ih)/2", scale, scale));
+        }
+        
+        // Apply video filters if any
+        if !video_filters.is_empty() {
             ffmpeg_args.extend(vec![
                 "-vf".to_string(),
-                format!("scale={}:force_original_aspect_ratio=decrease,pad={}:(ow-iw)/2:(oh-ih)/2", scale, scale),
+                video_filters.join(","),
             ]);
+        }
+        
+        // Add audio filter for speed if needed
+        if (clip.speed - 1.0).abs() > 0.001 && config.include_audio {
+            // atempo filter for audio speed (can only handle 0.5-2.0 range per filter)
+            // For speeds outside this range, we need to chain multiple atempo filters
+            let mut audio_filters = Vec::new();
+            let mut remaining_speed = clip.speed;
+            
+            // Chain atempo filters to achieve the desired speed
+            while remaining_speed > 2.0 {
+                audio_filters.push("atempo=2.0".to_string());
+                remaining_speed /= 2.0;
+            }
+            while remaining_speed < 0.5 {
+                audio_filters.push("atempo=0.5".to_string());
+                remaining_speed /= 0.5;
+            }
+            if (remaining_speed - 1.0).abs() > 0.001 {
+                audio_filters.push(format!("atempo={:.3}", remaining_speed));
+            }
+            
+            if !audio_filters.is_empty() {
+                ffmpeg_args.extend(vec![
+                    "-af".to_string(),
+                    audio_filters.join(","),
+                ]);
+            }
         }
         
         ffmpeg_args.extend(vec![
