@@ -9,15 +9,18 @@ interface EditLayoutProps {
 }
 
 export const EditLayout = ({ onExportClick }: EditLayoutProps) => {
-    const selectedItemId = useMediaStore((state) => state.selectedItemId);
+    const selectedItemIds = useMediaStore((state) => state.selectedItemIds);
     const items = useMediaStore((state) => state.items);
-    const selectItem = useMediaStore((state) => state.selectItem);
+    const clearSelection = useMediaStore((state) => state.clearSelection);
 
-    const selectedItem = items.find((item) => item.id === selectedItemId);
+    // Show the first selected item in the video player
+    const selectedItem = selectedItemIds.length > 0
+        ? items.find((item) => item.id === selectedItemIds[0])
+        : undefined;
 
     const handleClickOutsideMedia = () => {
         // Deselect media when clicking outside the media library
-        selectItem(null);
+        clearSelection();
     };
 
     return (

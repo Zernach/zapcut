@@ -12,18 +12,18 @@ interface MediaLibraryProps {
 
 export function MediaLibrary({ onExportClick }: MediaLibraryProps) {
     const items = useMediaStore((state) => state.items);
-    const selectItem = useMediaStore((state) => state.selectItem);
-    const clearSelection = useTimelineStore((state) => state.clearSelection);
+    const clearMediaSelection = useMediaStore((state) => state.clearSelection);
+    const clearTimelineSelection = useTimelineStore((state) => state.clearSelection);
     const { importFromFilePicker, isImporting } = useMediaImport();
 
     const handleContainerClick = (e: React.MouseEvent) => {
         // Stop propagation to prevent deselecting media when clicking inside the library
         e.stopPropagation();
         // Clear timeline clip selection when clicking in media library
-        clearSelection();
+        clearTimelineSelection();
         // Clear media selection when clicking anywhere in the container
         // (MediaItem components stop propagation, so this only fires when not clicking items)
-        selectItem(null);
+        clearMediaSelection();
     };
 
     const handleImportClick = (e: React.MouseEvent) => {
@@ -37,9 +37,9 @@ export function MediaLibrary({ onExportClick }: MediaLibraryProps) {
     };
 
     return (
-        <div className="h-full flex flex-col bg-panel" onClick={handleContainerClick}>
+        <div className="h-full flex flex-col bg-panel relative" onClick={handleContainerClick}>
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
+            <div className="flex-shrink-0 flex items-center justify-between p-4 border-b border-border">
                 <h2 className="text-lg font-semibold">Media</h2>
                 <div className="flex items-center gap-2">
                     <button
@@ -63,28 +63,34 @@ export function MediaLibrary({ onExportClick }: MediaLibraryProps) {
             </div>
 
             {/* Drop zone and grid */}
-            <DropZone>
-                <div className="flex-1 overflow-auto p-4">
-                    {items.length === 0 ? (
-                        <div className="h-full flex items-center justify-center text-gray-400">
-                            <div className="text-center">
-                                <Upload size={48} className="mx-auto mb-2 opacity-50" />
-                                <p>No media imported yet</p>
-                                <p className="text-sm">Drag files here or click Import</p>
+            <div className="flex-1 min-h-0">
+                <DropZone>
+                    <div className="h-full overflow-y-auto p-4">
+                        {items.length === 0 ? (
+                            <div className="h-full flex items-center justify-center text-gray-400">
+                                <div className="text-center">
+                                    <Upload size={48} className="mx-auto mb-2 opacity-50" />
+                                    <p>No media imported yet</p>
+                                    <p className="text-sm">Drag files here or click Import</p>
+                                </div>
                             </div>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-2 gap-4">
-                            {items.map((item) => (
-                                <MediaItemComponent key={item.id} item={item} />
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </DropZone>
+                        ) : (
+                            <div className="grid grid-cols-2 gap-4">
+                                {items.map((item) => (
+                                    <MediaItemComponent key={item.id} item={item} />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </DropZone>
+            </div>
 
-            {/* Selected Clip Toolbox */}
-            <SelectedClipToolbox />
+            {/* Selected Clip Toolbox - Absolutely positioned at bottom */}
+            <div className="absolute bottom-0 left-0 right-0 z-50 pointer-events-none">
+                <div className="pointer-events-auto">
+                    <SelectedClipToolbox />
+                </div>
+            </div>
         </div>
     );
 }

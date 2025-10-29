@@ -10,6 +10,7 @@ export interface Clip {
     id: string;
     name: string;
     filePath: string;
+    proxyPath?: string; // path to lightweight 720p proxy for preview
     duration: number; // seconds (current playable duration on timeline)
     originalDuration: number; // original media duration (for trim constraints)
     startTime: number; // position on timeline
@@ -28,6 +29,7 @@ export interface MediaItem {
     id: string;
     name: string;
     filePath: string;
+    proxyPath?: string; // path to lightweight 720p proxy for preview
     duration: number;
     width: number;
     height: number;

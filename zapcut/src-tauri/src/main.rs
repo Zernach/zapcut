@@ -5,7 +5,7 @@ mod commands;
 mod utils;
 
 use commands::media::{import_video, import_videos, validate_video_file, get_thumbnail_base64, read_video_file, read_binary_file};
-use commands::export::{export_timeline, get_export_progress};
+use commands::export::{export_timeline, export_timeline_optimized, get_export_progress};
 use commands::recording::{
     RecordingManager,
     get_available_microphones, get_available_webcams,
@@ -14,6 +14,7 @@ use commands::recording::{
     generate_recording_thumbnail,
 };
 use commands::app::init_app;
+use commands::prerender::{prerender_segment, get_prerender_cache_dir, clear_prerender_cache};
 
 fn main() {
     tauri::Builder::default()
@@ -29,6 +30,7 @@ fn main() {
             read_video_file,
             read_binary_file,
             export_timeline,
+            export_timeline_optimized,
             get_export_progress,
             get_available_microphones,
             get_available_webcams,
@@ -39,6 +41,9 @@ fn main() {
             export_recording_to_file,
             generate_recording_thumbnail,
             init_app,
+            prerender_segment,
+            get_prerender_cache_dir,
+            clear_prerender_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

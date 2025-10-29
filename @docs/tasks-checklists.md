@@ -10,6 +10,37 @@
 
 ## Recent Updates
 
+### October 29, 2025 - iPhone Video Import Fix
+**Status:** ✅ Completed
+
+Fixed JSON parsing errors when importing iPhone videos (MOV files from AirDrop):
+
+**Root Cause:**
+- iPhone videos contain complex metadata structures that weren't being handled
+- The ffprobe JSON deserializer was failing on missing or unexpected fields
+- Specifically, some audio streams (like spatial audio tracks) don't have `codec_name` fields
+- Videos also include extra metadata: DOVI configuration, ambient viewing environment, multiple data streams for motion/location data
+
+**Changes Made:**
+- ✅ Made `codec_name` optional in `FFProbeStream` struct
+- ✅ Added `#[serde(flatten)]` with HashMap to accept any extra JSON fields
+- ✅ Updated codec handling to gracefully handle missing codec names
+- ✅ Added comprehensive debug logging to see raw ffprobe output
+- ✅ Fixed audio codec extraction to handle optional codec_name
+
+**Technical Details:**
+- iPhone videos can have 9+ streams (video, audio, spatial audio, metadata, motion data)
+- HEVC videos include HDR metadata, Dolby Vision configuration, color space info
+- Changed `codec_name: String` to `codec_name: Option<String>` in FFProbeStream
+- Changed audio codec extraction from `.map()` to `.and_then()` for proper None handling
+
+**Result:**
+- iPhone MOV files with HEVC codec now import successfully
+- 4K HDR videos with spatial audio are properly handled
+- Metadata streams no longer cause parsing failures
+
+---
+
 ### October 29, 2025 - Speed Control for Timeline Clips
 **Status:** ✅ Completed
 

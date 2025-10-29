@@ -2971,9 +2971,12 @@ Prefer composing components over complex prop APIs:
 #### NFR-1.3: Playback Smoothness
 - **Target**: 30fps minimum during preview playback
 - **Measurement**: Dropped frames percentage (should be <5%)
+- **Implementation Status**: ✅ **COMPLETED** - Dual-video buffering system implemented
 - **Optimization Strategies**:
   - Hardware-accelerated video decoding
-  - Preload clips near playhead
+  - **✅ Dual-video buffering**: Two video elements alternate - one plays current clip while the other preloads next clip
+  - **✅ Seamless transitions**: Instant switch between preloaded videos (no loading pause)
+  - **✅ Smart preloading**: Next clip in timeline is loaded in background during playback
   - Reduce real-time compositing complexity
 
 #### NFR-1.4: Export Speed
@@ -3416,7 +3419,7 @@ Base unit: 4px
 4. **Playback Engine**
    - Continuous playback across clips
    - Auto-advance playhead during play
-   - Handle gaps (pause or black frame)
+   - ✅ Handle gaps (shows black frame, continues playback)
    - Stop at timeline end
 
 5. **Audio Synchronization**
@@ -3454,6 +3457,7 @@ Base unit: 4px
    - Build filter_complex from timeline
    - Handle clip trimming
    - Concatenate clips
+   - ✅ Insert black frames for timeline gaps
    - Overlay tracks
    - Audio mixing
 

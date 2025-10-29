@@ -26,15 +26,19 @@ struct FFProbeFormat {
     duration: Option<String>,
     size: Option<String>,
     bit_rate: Option<String>,
+    #[serde(flatten)]
+    _extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
 struct FFProbeStream {
     codec_type: String,
-    codec_name: String,
+    codec_name: Option<String>,
     width: Option<u32>,
     height: Option<u32>,
     r_frame_rate: Option<String>,
+    #[serde(flatten)]
+    _extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// Get the path to the FFmpeg binary
@@ -158,9 +162,9 @@ pub fn get_video_info(file_path: &str) -> Result<VideoInfo> {
     }
 
     let json_str = String::from_utf8(output.stdout).context("Failed to parse ffprobe output")?;
-
+    
     let probe_output: FFProbeOutput =
-        serde_json::from_str(&json_str).context("Failed to parse JSON")?;
+        serde_json::from_str(&json_str).context(format!("Failed to parse JSON. Raw output: {}", json_str))?;
 
     // Extract video stream
     let video_stream = probe_output
@@ -204,9 +208,9 @@ pub fn get_video_info(file_path: &str) -> Result<VideoInfo> {
         width: video_stream.width.unwrap_or(1920),
         height: video_stream.height.unwrap_or(1080),
         fps,
-        codec: video_stream.codec_name.clone(),
+        codec: video_stream.codec_name.clone().unwrap_or_else(|| "unknown".to_string()),
         bitrate,
-        audio_codec: audio_stream.map(|s| s.codec_name.clone()),
+        audio_codec: audio_stream.and_then(|s| s.codec_name.clone()),
         file_size,
     };
 
@@ -251,6 +255,69 @@ pub fn generate_thumbnail(video_path: &str, output_path: &str, timestamp: f64) -
         );
     }
 
+    Ok(())
+}
+
+/// Generate a lightweight 720p proxy video for fast preview playback
+/// Uses ultrafast preset and CRF 28 for maximum encoding speed
+pub fn create_proxy(video_path: &str, output_path: &str, target_fps: Option<f64>) -> Result<()> {
+    let ffmpeg_path = get_ffmpeg_path()?;
+    
+    eprintln!("[Proxy] Creating proxy for: {}", video_path);
+    eprintln!("[Proxy] Output path: {}", output_path);
+    
+    let mut args = vec![
+        "-i".to_string(),
+        video_path.to_string(),
+        "-vf".to_string(),
+        "scale=-2:720".to_string(), // Scale to 720p height, maintain aspect ratio (divisible by 2)
+        "-c:v".to_string(),
+        "libx264".to_string(),
+        "-preset".to_string(),
+        "ultrafast".to_string(), // Fastest encoding
+        "-crf".to_string(),
+        "28".to_string(), // Lower quality for smaller file size
+        "-maxrate".to_string(),
+        "3M".to_string(), // Cap bitrate at 3 Mbps
+        "-bufsize".to_string(),
+        "6M".to_string(),
+    ];
+    
+    // Set FPS if specified (useful for high-fps sources)
+    if let Some(fps) = target_fps {
+        args.push("-r".to_string());
+        args.push(fps.to_string());
+    }
+    
+    // Audio settings - lower quality for smaller file
+    args.extend(vec![
+        "-c:a".to_string(),
+        "aac".to_string(),
+        "-b:a".to_string(),
+        "128k".to_string(),
+        "-ac".to_string(),
+        "2".to_string(), // Stereo
+    ]);
+    
+    args.extend(vec![
+        "-movflags".to_string(),
+        "+faststart".to_string(), // Enable fast seeking
+        "-y".to_string(),
+        output_path.to_string(),
+    ]);
+    
+    let output = Command::new(ffmpeg_path)
+        .args(&args)
+        .output()
+        .context("Failed to execute ffmpeg for proxy generation")?;
+    
+    if !output.status.success() {
+        let error_msg = String::from_utf8_lossy(&output.stderr);
+        eprintln!("[Proxy] FFmpeg error: {}", error_msg);
+        anyhow::bail!("FFmpeg proxy generation failed: {}", error_msg);
+    }
+    
+    eprintln!("[Proxy] Successfully created proxy");
     Ok(())
 }
 

@@ -1,4 +1,4 @@
-use crate::utils::ffmpeg::{generate_thumbnail, get_video_info, VideoInfo};
+use crate::utils::ffmpeg::{create_proxy, generate_thumbnail, get_video_info, VideoInfo};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -10,6 +10,7 @@ pub struct MediaItem {
     pub id: String,
     pub name: String,
     pub file_path: String,
+    pub proxy_path: Option<String>,
     pub duration: f64,
     pub width: u32,
     pub height: u32,
@@ -43,10 +44,14 @@ pub async fn import_video(file_path: String) -> Result<MediaItem, String> {
     // Generate thumbnail
     let thumbnail_path = generate_thumbnail_for_import(&file_path, &id, &info).ok();
 
+    // Generate proxy video for fast preview
+    let proxy_path = generate_proxy_for_import(&file_path, &id, &info).ok();
+
     let item = MediaItem {
         id,
         name,
         file_path: file_path.clone(),
+        proxy_path,
         duration: info.duration,
         width: info.width,
         height: info.height,
@@ -100,6 +105,36 @@ fn generate_thumbnail_for_import(
     Ok(thumbnail_path.to_string_lossy().to_string())
 }
 
+fn generate_proxy_for_import(
+    video_path: &str,
+    id: &str,
+    info: &VideoInfo,
+) -> Result<String, String> {
+    // Create proxies directory in temp
+    let app_data = std::env::temp_dir().join("zapcut").join("proxies");
+    fs::create_dir_all(&app_data)
+        .map_err(|e| format!("Failed to create proxies directory: {}", e))?;
+
+    let proxy_name = format!("{}_proxy.mp4", id);
+    let proxy_path = app_data.join(&proxy_name);
+
+    // Cap FPS at 30 for high-fps sources (saves processing time and file size)
+    let target_fps = if info.fps > 60.0 {
+        Some(30.0)
+    } else {
+        None
+    };
+
+    eprintln!("[Proxy] Generating proxy for: {} ({}x{} @ {:.2}fps)", 
+        video_path, info.width, info.height, info.fps);
+
+    create_proxy(video_path, proxy_path.to_str().unwrap(), target_fps)
+        .map_err(|e| format!("Failed to generate proxy: {}", e))?;
+
+    eprintln!("[Proxy] Proxy generated successfully: {}", proxy_path.to_string_lossy());
+    Ok(proxy_path.to_string_lossy().to_string())
+}
+
 #[command]
 pub async fn get_thumbnail_base64(thumbnail_path: String) -> Result<String, String> {
     use std::fs;
@@ -118,10 +153,35 @@ pub async fn get_thumbnail_base64(thumbnail_path: String) -> Result<String, Stri
 pub async fn read_video_file(file_path: String) -> Result<Vec<u8>, String> {
     use std::fs;
     
+    eprintln!("[read_video_file] START - Path: {}", file_path);
+    
+    // Check if file exists
+    if !Path::new(&file_path).exists() {
+        let error = format!("File does not exist at path: {}", file_path);
+        eprintln!("[read_video_file] ERROR: {}", error);
+        return Err(error);
+    }
+    
+    // Get file metadata
+    let metadata = fs::metadata(&file_path)
+        .map_err(|e| {
+            let error = format!("Failed to read file metadata: {} - Path: {}", e, file_path);
+            eprintln!("[read_video_file] ERROR: {}", error);
+            error
+        })?;
+    
+    let file_size = metadata.len();
+    eprintln!("[read_video_file] File exists - Size: {} bytes ({:.2} MB)", file_size, file_size as f64 / 1_048_576.0);
+    
     // Read the video file
     let file_data = fs::read(&file_path)
-        .map_err(|e| format!("Failed to read video file: {}", e))?;
+        .map_err(|e| {
+            let error = format!("Failed to read video file: {} - Path: {}", e, file_path);
+            eprintln!("[read_video_file] ERROR: {}", error);
+            error
+        })?;
     
+    eprintln!("[read_video_file] SUCCESS - Read {} bytes", file_data.len());
     Ok(file_data)
 }
 

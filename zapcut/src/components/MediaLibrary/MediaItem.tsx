@@ -11,11 +11,11 @@ interface MediaItemProps {
 
 export function MediaItem({ item }: MediaItemProps) {
     const [thumbnailSrc, setThumbnailSrc] = useState<string | null>(null);
-    const selectedId = useMediaStore((state) => state.selectedItemId);
-    const selectItem = useMediaStore((state) => state.selectItem);
+    const selectedIds = useMediaStore((state) => state.selectedItemIds);
+    const toggleItemSelection = useMediaStore((state) => state.toggleItemSelection);
     const removeItem = useMediaStore((state) => state.removeItem);
 
-    const isSelected = selectedId === item.id;
+    const isSelected = selectedIds.includes(item.id);
 
     // Load thumbnail from backend as base64
     useEffect(() => {
@@ -40,7 +40,10 @@ export function MediaItem({ item }: MediaItemProps) {
 
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent bubbling to MediaLibrary
-        selectItem(item.id);
+
+        // Check for Shift or Command/Meta key for multi-select
+        const isMultiSelect = e.shiftKey || e.metaKey || e.ctrlKey;
+        toggleItemSelection(item.id, isMultiSelect);
     };
 
     const handleRemove = (e: React.MouseEvent) => {

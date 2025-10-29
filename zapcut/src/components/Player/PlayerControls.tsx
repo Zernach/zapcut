@@ -38,6 +38,16 @@ export function PlayerControls() {
         selectMediaItem(null);
     };
 
+    const handlePlayPause = () => {
+        // If at the end of the timeline, restart from beginning
+        if (!isPlaying && currentTime >= duration && duration > 0) {
+            setCurrentTime(0);
+            setPlaying(true);
+        } else {
+            setPlaying(!isPlaying);
+        }
+    };
+
     // Handle keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -80,7 +90,7 @@ export function PlayerControls() {
                 {/* Left: Play controls */}
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => setPlaying(!isPlaying)}
+                        onClick={handlePlayPause}
                         className="p-2 hover:bg-gray-700 rounded transition-colors"
                     >
                         {isPlaying ? <Pause size={20} /> : <Play size={20} />}
