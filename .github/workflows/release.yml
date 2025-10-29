@@ -7,253 +7,336 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
-            arch: 'aarch64'
-            friendly_name: 'MacBook-AppleSilicon'
-          - platform: 'macos-latest'
-            args: '--target x86_64-apple-darwin'
-            arch: 'x86_64'
-            friendly_name: 'MacBook-Intel'
-          - platform: 'ubuntu-22.04'
-            args: ''
-            arch: 'amd64'
-            friendly_name: 'Linux'
-          - platform: 'windows-latest'
-            args: ''
-            arch: 'x64'
-            friendly_name: 'Windows'
-
-    runs-on: ${{ matrix.platform }}
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.result }}
+      release_upload_url: ${{ steps.create-release.outputs.upload_url }}
+    
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: '20'
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=$(node -p "require('./zapcut/package.json').version")" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create release
+        id: create-release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: `v${{ steps.get_version.outputs.VERSION }}`,
+              name: `ZapCut v${{ steps.get_version.outputs.VERSION }}`,
+              body: 'Release notes for version ${{ steps.get_version.outputs.VERSION }}',
+              draft: true,
+              prerelease: false
+            })
+            return data.id
+
+  build-tauri:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            arch: aarch64
+            platform_name: macos-aarch64
+            friendly_name: MacBook-AppleSilicon
+            ffmpeg_url: https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip
+            ffprobe_url: https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip
+            
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            arch: x86_64
+            platform_name: macos-x86_64
+            friendly_name: MacBook-Intel
+            ffmpeg_url: https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip
+            ffprobe_url: https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip
+            
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            arch: amd64
+            platform_name: linux-x86_64
+            friendly_name: Linux
+            ffmpeg_url: https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+            
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            arch: x64
+            platform_name: windows-x86_64
+            friendly_name: Windows
+            ffmpeg_url: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+
+    runs-on: ${{ matrix.platform }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: zapcut/package-lock.json
 
-      - name: Install Rust stable
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.target }}
 
-      - name: Install dependencies (Ubuntu only)
+      - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
 
-      - name: Download FFmpeg binaries (macOS Apple Silicon)
-        if: matrix.platform == 'macos-latest' && matrix.arch == 'aarch64'
+      - name: Install frontend dependencies
+        working-directory: zapcut
+        run: npm ci
+
+      - name: Download FFmpeg for macOS
+        if: startsWith(matrix.platform, 'macos')
+        working-directory: zapcut/src-tauri
         run: |
-          cd zapcut/src-tauri/binaries/macos-aarch64
-          echo "Downloading FFmpeg for macOS Apple Silicon..."
-          curl -L https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip -o ffmpeg.zip
-          curl -L https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip -o ffprobe.zip
+          echo "Downloading FFmpeg for ${{ matrix.platform_name }}"
+          mkdir -p binaries/${{ matrix.platform_name }}
+          cd binaries/${{ matrix.platform_name }}
+          
+          # Download and extract ffmpeg
+          curl -L ${{ matrix.ffmpeg_url }} -o ffmpeg.zip
           unzip -o ffmpeg.zip
+          chmod +x ffmpeg
+          rm ffmpeg.zip
+          
+          # Download and extract ffprobe
+          curl -L ${{ matrix.ffprobe_url }} -o ffprobe.zip
           unzip -o ffprobe.zip
-          rm ffmpeg.zip ffprobe.zip
-          chmod +x ffmpeg ffprobe
-          ls -lah ffmpeg ffprobe
-          ./ffmpeg -version | head -1
+          chmod +x ffprobe
+          rm ffprobe.zip
+          
+          # Verify
+          ./ffmpeg -version
+          ./ffprobe -version
 
-      - name: Download FFmpeg binaries (macOS Intel)
-        if: matrix.platform == 'macos-latest' && matrix.arch == 'x86_64'
-        run: |
-          cd zapcut/src-tauri/binaries/macos-x86_64
-          echo "Downloading FFmpeg for macOS Intel..."
-          curl -L https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip -o ffmpeg.zip
-          curl -L https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip -o ffprobe.zip
-          unzip -o ffmpeg.zip
-          unzip -o ffprobe.zip
-          rm ffmpeg.zip ffprobe.zip
-          chmod +x ffmpeg ffprobe
-          ls -lah ffmpeg ffprobe
-          ./ffmpeg -version | head -1
-
-      - name: Download FFmpeg binaries (Linux)
+      - name: Download FFmpeg for Linux
         if: matrix.platform == 'ubuntu-22.04'
+        working-directory: zapcut/src-tauri
         run: |
-          cd zapcut/src-tauri/binaries/linux-x86_64
-          echo "Downloading FFmpeg for Linux..."
-          wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          echo "Downloading FFmpeg for ${{ matrix.platform_name }}"
+          mkdir -p binaries/${{ matrix.platform_name }}
+          cd binaries/${{ matrix.platform_name }}
+          
+          # Download and extract
+          wget -q ${{ matrix.ffmpeg_url }}
           tar -xf ffmpeg-release-amd64-static.tar.xz
           mv ffmpeg-*-amd64-static/ffmpeg .
           mv ffmpeg-*-amd64-static/ffprobe .
-          rm -rf ffmpeg-*-amd64-static*
           chmod +x ffmpeg ffprobe
-          ls -lah ffmpeg ffprobe
-          ./ffmpeg -version | head -1
+          rm -rf ffmpeg-*-amd64-static*
+          
+          # Verify
+          ./ffmpeg -version
+          ./ffprobe -version
 
-      - name: Download FFmpeg binaries (Windows)
+      - name: Download FFmpeg for Windows
         if: matrix.platform == 'windows-latest'
+        working-directory: zapcut/src-tauri
         shell: pwsh
         run: |
-          cd zapcut/src-tauri/binaries/windows-x86_64
-          Write-Host "Downloading FFmpeg for Windows..."
-          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "ffmpeg.zip"
-          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "."
+          Write-Host "Downloading FFmpeg for ${{ matrix.platform_name }}"
+          New-Item -ItemType Directory -Force -Path "binaries/${{ matrix.platform_name }}"
+          Set-Location "binaries/${{ matrix.platform_name }}"
+          
+          # Download and extract
+          Invoke-WebRequest -Uri "${{ matrix.ffmpeg_url }}" -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "." -Force
+          
+          # Find and move binaries
           $ffmpegDir = Get-ChildItem -Directory -Filter "ffmpeg-*" | Select-Object -First 1
-          Move-Item -Path "$($ffmpegDir.FullName)\bin\ffmpeg.exe" -Destination "." -Force
-          Move-Item -Path "$($ffmpegDir.FullName)\bin\ffprobe.exe" -Destination "." -Force
-          Remove-Item -Recurse -Force $ffmpegDir, "ffmpeg.zip"
-          Get-Item ffmpeg.exe, ffprobe.exe | Format-Table
-          .\ffmpeg.exe -version | Select-Object -First 1
+          Move-Item -Path "$($ffmpegDir.FullName)/bin/ffmpeg.exe" -Destination "." -Force
+          Move-Item -Path "$($ffmpegDir.FullName)/bin/ffprobe.exe" -Destination "." -Force
+          
+          # Cleanup
+          Remove-Item -Recurse -Force $ffmpegDir
+          Remove-Item -Force "ffmpeg.zip"
+          
+          # Verify
+          ./ffmpeg.exe -version
+          ./ffprobe.exe -version
 
-      - name: Install frontend dependencies
+      - name: Update Tauri config with platform-specific resources
+        working-directory: zapcut/src-tauri
         run: |
-          cd zapcut
-          npm ci
+          echo "Updating tauri.conf.json for platform: ${{ matrix.platform_name }}"
+          python3 update_tauri_config.py --platform ${{ matrix.platform_name }}
 
-      - name: Update tauri.conf.json with platform-specific FFmpeg binaries
-        shell: bash
-        run: |
-          cd zapcut/src-tauri
-          PLATFORM="${{ matrix.platform }}"
-          ARCH="${{ matrix.arch }}"
-          
-          # Determine which FFmpeg binaries to include for this platform
-          if [[ "$PLATFORM" == "macos-latest" ]]; then
-            if [[ "$ARCH" == "aarch64" ]]; then
-              RESOURCES='["binaries/macos-aarch64/ffmpeg", "binaries/macos-aarch64/ffprobe"]'
-            else
-              RESOURCES='["binaries/macos-x86_64/ffmpeg", "binaries/macos-x86_64/ffprobe"]'
-            fi
-          elif [[ "$PLATFORM" == "ubuntu-22.04" ]]; then
-            RESOURCES='["binaries/linux-x86_64/ffmpeg", "binaries/linux-x86_64/ffprobe"]'
-          elif [[ "$PLATFORM" == "windows-latest" ]]; then
-            RESOURCES='["binaries/windows-x86_64/ffmpeg.exe", "binaries/windows-x86_64/ffprobe.exe"]'
-          fi
-          
-          echo "Platform: $PLATFORM, Arch: $ARCH"
-          echo "Setting resources to: $RESOURCES"
-          
-          # Update tauri.conf.json - use Python for reliable JSON manipulation
-          python3 << 'EOF'
-          import json
-          
-          with open('tauri.conf.json', 'r') as f:
-              config = json.load(f)
-          
-          resources = $RESOURCES
-          config['bundle']['resources'] = resources
-          
-          with open('tauri.conf.json', 'w') as f:
-              json.dump(config, f, indent=2)
-          
-          print(f"Updated resources to: {resources}")
-          EOF
-          
-          echo "Updated tauri.conf.json:"
-          cat tauri.conf.json | grep -A 10 '"resources"'
+      - name: Build frontend
+        working-directory: zapcut
+        run: npm run build
 
-      - name: Verify FFmpeg binaries exist
-        shell: bash
-        run: |
-          PLATFORM="${{ matrix.platform }}"
-          ARCH="${{ matrix.arch }}"
-          
-          if [[ "$PLATFORM" == "macos-latest" ]]; then
-            if [[ "$ARCH" == "aarch64" ]]; then
-              BIN_DIR="zapcut/src-tauri/binaries/macos-aarch64"
-            else
-              BIN_DIR="zapcut/src-tauri/binaries/macos-x86_64"
-            fi
-          elif [[ "$PLATFORM" == "ubuntu-22.04" ]]; then
-            BIN_DIR="zapcut/src-tauri/binaries/linux-x86_64"
-          elif [[ "$PLATFORM" == "windows-latest" ]]; then
-            BIN_DIR="zapcut/src-tauri/binaries/windows-x86_64"
-          fi
-          
-          echo "Verifying FFmpeg binaries in: $BIN_DIR"
-          ls -lah "$BIN_DIR/" || (echo "Directory not found!" && exit 1)
-          
-          # Verify binaries exist
-          if [[ ! -f "$BIN_DIR/ffmpeg"* ]] && [[ ! -f "$BIN_DIR/ffmpeg.exe" ]]; then
-            echo "❌ ERROR: No FFmpeg binary found in $BIN_DIR"
-            exit 1
-          fi
-          echo "✅ FFmpeg binaries verified"
-  
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        working-directory: zapcut/src-tauri
+        run: cargo tauri build --target ${{ matrix.target }}
+
+      - name: Rename artifacts (macOS)
+        if: startsWith(matrix.platform, 'macos')
+        working-directory: zapcut/src-tauri/target/${{ matrix.target }}/release/bundle
+        run: |
+          # Find the DMG and rename it
+          DMG_FILE=$(find dmg -name "*.dmg" | head -n 1)
+          if [ -n "$DMG_FILE" ]; then
+            VERSION=$(node -p "require('../../../../../../package.json').version")
+            NEW_NAME="ZapCut_${VERSION}_${{ matrix.friendly_name }}.dmg"
+            cp "$DMG_FILE" "$NEW_NAME"
+            echo "Renamed: $DMG_FILE -> $NEW_NAME"
+            echo "DMG_PATH=$(pwd)/$NEW_NAME" >> $GITHUB_ENV
+          fi
+          
+          # Find the .app.tar.gz and rename it
+          APP_TAR=$(find macos -name "*.app.tar.gz" | head -n 1)
+          if [ -n "$APP_TAR" ]; then
+            VERSION=$(node -p "require('../../../../../../package.json').version")
+            NEW_APP_NAME="ZapCut_${VERSION}_${{ matrix.friendly_name }}.app.tar.gz"
+            cp "$APP_TAR" "$NEW_APP_NAME"
+            echo "Renamed: $APP_TAR -> $NEW_APP_NAME"
+            echo "APP_TAR_PATH=$(pwd)/$NEW_APP_NAME" >> $GITHUB_ENV
+          fi
+
+      - name: Rename artifacts (Windows)
+        if: matrix.platform == 'windows-latest'
+        working-directory: zapcut/src-tauri/target/${{ matrix.target }}/release/bundle
+        shell: pwsh
+        run: |
+          # Find the MSI and rename it
+          $msiFile = Get-ChildItem -Path "msi" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if ($msiFile) {
+            $version = (Get-Content "../../../../../../package.json" | ConvertFrom-Json).version
+            $newName = "ZapCut_${version}_${{ matrix.friendly_name }}.msi"
+            Copy-Item $msiFile.FullName -Destination $newName
+            Write-Host "Renamed: $($msiFile.Name) -> $newName"
+            echo "MSI_PATH=$(Get-Location)\$newName" >> $env:GITHUB_ENV
+          }
+          
+          # Find the NSIS installer and rename it
+          $nsisFile = Get-ChildItem -Path "nsis" -Filter "*-setup.exe" -Recurse | Select-Object -First 1
+          if ($nsisFile) {
+            $version = (Get-Content "../../../../../../package.json" | ConvertFrom-Json).version
+            $newName = "ZapCut_${version}_${{ matrix.friendly_name }}-setup.exe"
+            Copy-Item $nsisFile.FullName -Destination $newName
+            Write-Host "Renamed: $($nsisFile.Name) -> $newName"
+            echo "NSIS_PATH=$(Get-Location)\$newName" >> $env:GITHUB_ENV
+          }
+
+      - name: Rename artifacts (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        working-directory: zapcut/src-tauri/target/${{ matrix.target }}/release/bundle
+        run: |
+          # Find the DEB and rename it
+          DEB_FILE=$(find deb -name "*.deb" | head -n 1)
+          if [ -n "$DEB_FILE" ]; then
+            VERSION=$(node -p "require('../../../../../../package.json').version")
+            NEW_NAME="zapcut_${VERSION}_${{ matrix.friendly_name }}.deb"
+            cp "$DEB_FILE" "$NEW_NAME"
+            echo "Renamed: $DEB_FILE -> $NEW_NAME"
+            echo "DEB_PATH=$(pwd)/$NEW_NAME" >> $GITHUB_ENV
+          fi
+          
+          # Find the AppImage and rename it
+          APPIMAGE_FILE=$(find appimage -name "*.AppImage" | head -n 1)
+          if [ -n "$APPIMAGE_FILE" ]; then
+            VERSION=$(node -p "require('../../../../../../package.json').version")
+            NEW_NAME="zapcut_${VERSION}_${{ matrix.friendly_name }}.AppImage"
+            cp "$APPIMAGE_FILE" "$NEW_NAME"
+            echo "Renamed: $APPIMAGE_FILE -> $NEW_NAME"
+            echo "APPIMAGE_PATH=$(pwd)/$NEW_NAME" >> $GITHUB_ENV
+          fi
+
+      - name: Upload DMG to release (macOS)
+        if: startsWith(matrix.platform, 'macos') && env.DMG_PATH != ''
+        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS code signing (optional - comment out if not using)
-          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # APPLE_ID: ${{ secrets.APPLE_ID }}
-          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          projectPath: zapcut
-          tagName: ${{ github.ref_name }}
-          releaseName: 'ZapCut ${{ github.ref_name }}'
-          releaseBody: 'See the assets below to download this version and install.'
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: ${{ env.DMG_PATH }}
+          asset_name: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && format('ZapCut_{0}_{1}.dmg', steps.get_version.outputs.VERSION, matrix.friendly_name) || format('ZapCut_{0}_{1}.dmg', 'dev', matrix.friendly_name) }}
+          asset_content_type: application/x-apple-diskimage
 
-      - name: Rename release assets to user-friendly names
+      - name: Upload APP.TAR.GZ to release (macOS)
+        if: startsWith(matrix.platform, 'macos') && env.APP_TAR_PATH != ''
+        uses: actions/upload-release-asset@v1
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          PLATFORM="${{ matrix.platform }}"
-          FRIENDLY_NAME="${{ matrix.friendly_name }}"
-          TAG="${{ github.ref_name }}"
-          
-          # Determine patterns for sed based on platform
-          if [[ "$PLATFORM" == "macos-latest" ]]; then
-            # macOS renaming
-            PATTERN1="s/_aarch64/_${FRIENDLY_NAME}/g"
-            PATTERN2="s/_x64/_${FRIENDLY_NAME}/g"
-          elif [[ "$PLATFORM" == "ubuntu-22.04" ]]; then
-            # Linux renaming
-            PATTERN1="s/_amd64/_${FRIENDLY_NAME}/g"
-          elif [[ "$PLATFORM" == "windows-latest" ]]; then
-            # Windows renaming
-            PATTERN1="s/_x64-setup/_${FRIENDLY_NAME}-setup/g"
-            PATTERN2="s/_x64_/_${FRIENDLY_NAME}_/g"
-          fi
-          
-          # Get assets and rename them
-          gh release view "$TAG" --json assets -q '.assets[].name' | while read ASSET_NAME; do
-            NEW_NAME="$ASSET_NAME"
-            
-            # Apply patterns
-            if [[ ! -z "$PATTERN1" ]]; then
-              NEW_NAME=$(echo "$NEW_NAME" | sed "$PATTERN1")
-            fi
-            if [[ ! -z "$PATTERN2" ]]; then
-              NEW_NAME=$(echo "$NEW_NAME" | sed "$PATTERN2")
-            fi
-            
-            # Update the asset name if it changed
-            if [[ "$NEW_NAME" != "$ASSET_NAME" ]]; then
-              echo "Renaming: $ASSET_NAME -> $NEW_NAME"
-              # Use GitHub API to update asset name
-              ASSET_ID=$(gh release view "$TAG" --json assets -q ".assets[] | select(.name==\"$ASSET_NAME\") | .id")
-              curl -X PATCH \
-                -H "Authorization: token $GH_TOKEN" \
-                -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/${{ github.repository }}/releases/assets/$ASSET_ID" \
-                -d "{\"name\":\"$NEW_NAME\"}"
-              echo "✓ Renamed to: $NEW_NAME"
-            fi
-          done
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: ${{ env.APP_TAR_PATH }}
+          asset_name: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && format('ZapCut_{0}_{1}.app.tar.gz', steps.get_version.outputs.VERSION, matrix.friendly_name) || format('ZapCut_{0}_{1}.app.tar.gz', 'dev', matrix.friendly_name) }}
+          asset_content_type: application/gzip
 
+      - name: Upload MSI to release (Windows)
+        if: matrix.platform == 'windows-latest' && env.MSI_PATH != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: ${{ env.MSI_PATH }}
+          asset_name: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && format('ZapCut_{0}_{1}.msi', steps.get_version.outputs.VERSION, matrix.friendly_name) || format('ZapCut_{0}_{1}.msi', 'dev', matrix.friendly_name) }}
+          asset_content_type: application/x-msi
+
+      - name: Upload NSIS installer to release (Windows)
+        if: matrix.platform == 'windows-latest' && env.NSIS_PATH != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: ${{ env.NSIS_PATH }}
+          asset_name: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && format('ZapCut_{0}_{1}-setup.exe', steps.get_version.outputs.VERSION, matrix.friendly_name) || format('ZapCut_{0}_{1}-setup.exe', 'dev', matrix.friendly_name) }}
+          asset_content_type: application/x-msdownload
+
+      - name: Upload DEB to release (Linux)
+        if: matrix.platform == 'ubuntu-22.04' && env.DEB_PATH != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: ${{ env.DEB_PATH }}
+          asset_name: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && format('zapcut_{0}_{1}.deb', steps.get_version.outputs.VERSION, matrix.friendly_name) || format('zapcut_{0}_{1}.deb', 'dev', matrix.friendly_name) }}
+          asset_content_type: application/vnd.debian.binary-package
+
+      - name: Upload AppImage to release (Linux)
+        if: matrix.platform == 'ubuntu-22.04' && env.APPIMAGE_PATH != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: ${{ env.APPIMAGE_PATH }}
+          asset_name: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && format('zapcut_{0}_{1}.AppImage', steps.get_version.outputs.VERSION, matrix.friendly_name) || format('zapcut_{0}_{1}.AppImage', 'dev', matrix.friendly_name) }}
+          asset_content_type: application/x-executable

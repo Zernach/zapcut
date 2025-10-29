@@ -1,0 +1,3 @@
+# This directory will contain FFmpeg binaries for Linux
+# Binaries are downloaded automatically during GitHub Actions builds
+

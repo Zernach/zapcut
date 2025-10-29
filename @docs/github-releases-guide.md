@@ -119,6 +119,8 @@ When building via GitHub Actions (releases), FFmpeg binaries are automatically d
 - Linux: Downloaded from John Van Sickle's static builds
 - Windows: Downloaded from gyan.dev
 
+The workflow uses a Python script (`zapcut/src-tauri/update_tauri_config.py`) to safely update the `tauri.conf.json` file with platform-specific FFmpeg binary paths. This ensures each platform build correctly bundles the appropriate binaries.
+
 No manual intervention is required for GitHub releases.
 
 ### Local Development
@@ -251,6 +253,9 @@ Ensure you have the MSVC build tools installed via Visual Studio.
 - Linux: https://johnvansickle.com/ffmpeg/
 - Windows: https://www.gyan.dev/ffmpeg/builds/
 - Update URLs in `.github/workflows/release.yml` if they've changed
+
+### Python Syntax Error in Config Update
+If you see Python syntax errors related to `$RESOURCES`, this means the workflow is incorrectly trying to use shell variables in Python. The fix is to use the `update_tauri_config.py` script which properly handles JSON modification using Python's `json` module. This script is called with the `--platform` flag to specify which platform's binaries to bundle.
 
 ### Release Not Creating
 - Verify the tag follows the pattern `v*` (e.g., `v1.0.0`)
