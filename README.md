@@ -15,6 +15,13 @@ A modern, high-performance native video editor built with Tauri and React. Edit 
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript)
 ![Rust](https://img.shields.io/badge/Rust-1.75+-orange?logo=rust)
 
+<br/>
+
+<p>
+  <img src="@docs/images/readme-edit-screen.png" alt="ZapCut Edit Screen" width="49%" />
+  <img src="@docs/images/readme-record-screen.png" alt="ZapCut Record Screen" width="49%" />
+</p>
+
 </div>
 
 ---
