@@ -125,7 +125,6 @@ fn get_sidecar_path(binary_name: &str) -> Result<PathBuf> {
     // Try each path
     for path in &paths_to_try {
         if path.exists() {
-            eprintln!("[FFmpeg] Found {} at: {}", binary_name, path.display());
             return Ok(path.clone());
         }
     }
@@ -263,9 +262,6 @@ pub fn generate_thumbnail(video_path: &str, output_path: &str, timestamp: f64) -
 pub fn create_proxy(video_path: &str, output_path: &str, target_fps: Option<f64>) -> Result<()> {
     let ffmpeg_path = get_ffmpeg_path()?;
     
-    eprintln!("[Proxy] Creating proxy for: {}", video_path);
-    eprintln!("[Proxy] Output path: {}", output_path);
-    
     let mut args = vec![
         "-i".to_string(),
         video_path.to_string(),
@@ -313,11 +309,9 @@ pub fn create_proxy(video_path: &str, output_path: &str, target_fps: Option<f64>
     
     if !output.status.success() {
         let error_msg = String::from_utf8_lossy(&output.stderr);
-        eprintln!("[Proxy] FFmpeg error: {}", error_msg);
         anyhow::bail!("FFmpeg proxy generation failed: {}", error_msg);
     }
     
-    eprintln!("[Proxy] Successfully created proxy");
     Ok(())
 }
 

@@ -25,7 +25,6 @@ function getFallbackUrl(src: string): string {
 }
 
 export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
-    console.log('[VideoPlayer:render] Component rendering', { src, autoPlay });
 
     // Use two video elements for seamless transitions
     const video1Ref = useRef<HTMLVideoElement>(null);
@@ -64,12 +63,6 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
     const debouncedTime = useMemo(() => Math.floor(currentTime * 10) / 10, [currentTime]);
     const activeClip = useMemo(() => {
         const clip = getActiveClipAtTime(clips, debouncedTime);
-        console.log('[VideoPlayer:activeClip] Recomputed', {
-            debouncedTime,
-            clipId: clip?.id,
-            clipName: clip?.name,
-            totalClips: clips.length
-        });
         return clip;
     }, [clips, debouncedTime]);
     const timelineDuration = useMemo(() => getTimelineDuration(clips), [clips]);
@@ -107,51 +100,26 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
             _oldBlobUrl: string | null
         ) => {
             if (!videoRef.current || !clip.filePath || cancelled) {
-                console.log('[VideoPlayer:loadClipToVideo] Early exit -', {
-                    hasVideoRef: !!videoRef.current,
-                    hasFilePath: !!clip.filePath,
-                    cancelled,
-                    clipId: clip.id
-                });
                 return;
             }
-
-            console.log('[VideoPlayer:loadClipToVideo] Starting load', {
-                clipId: clip.id,
-                clipName: clip.name,
-                hasProxy: !!clip.proxyPath,
-                filePath: clip.filePath,
-                proxyPath: clip.proxyPath
-            });
 
             try {
                 const video = videoRef.current;
 
                 // Get streaming URL (uses proxy if available, zero RAM!)
                 const videoUrl = getVideoUrl(clip);
-                console.log('[VideoPlayer:loadClipToVideo] Generated URL', { clipId: clip.id, videoUrl });
                 setBlobUrl(videoUrl);
 
                 if (cancelled) {
-                    console.log('[VideoPlayer:loadClipToVideo] Cancelled after URL generation', { clipId: clip.id });
                     return;
                 }
 
                 // Set src and load metadata only
                 video.src = videoUrl;
                 video.preload = 'metadata'; // Only load metadata, not entire video!
-                console.log('[VideoPlayer:loadClipToVideo] Set video src and starting load', {
-                    clipId: clip.id,
-                    readyState: video.readyState
-                });
 
                 await new Promise<void>((resolve, reject) => {
                     const handleLoaded = () => {
-                        console.log('[VideoPlayer:loadClipToVideo] Metadata loaded successfully', {
-                            clipId: clip.id,
-                            duration: video.duration,
-                            readyState: video.readyState
-                        });
                         video.removeEventListener('loadedmetadata', handleLoaded);
                         video.removeEventListener('error', handleError);
                         if (!cancelled) {
@@ -162,13 +130,6 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
 
                     const handleError = (e: Event) => {
                         const videoEl = e.target as HTMLVideoElement;
-                        console.error('[VideoPlayer:loadClipToVideo] Video load error', {
-                            clipId: clip.id,
-                            error: videoEl.error?.message || 'Unknown error',
-                            code: videoEl.error?.code
-                        });
-                        video.removeEventListener('loadedmetadata', handleLoaded);
-                        video.removeEventListener('error', handleError);
                         reject(new Error(`Video error: ${videoEl.error?.message || 'Unknown error'}`));
                     };
 
@@ -188,30 +149,15 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
 
         const handleLoading = async () => {
             if (cancelled) {
-                console.log('[VideoPlayer:handleLoading] Cancelled - exiting');
                 return;
             }
 
-            console.log('[VideoPlayer:handleLoading] Starting', {
-                hasContent,
-                activeClipId: activeClip?.id,
-                activeClipName: activeClip?.name,
-                src
-            });
-
             if (!hasContent) {
-                console.log('[VideoPlayer:handleLoading] No timeline content');
                 // No timeline content - handle fallback video if provided
                 if (src && video1Ref.current) {
                     const video = video1Ref.current;
                     const videoUrl = getFallbackUrl(src);
                     const alreadyLoaded = video.src === videoUrl && video.readyState >= 1;
-
-                    console.log('[VideoPlayer:handleLoading] Fallback video', {
-                        videoUrl,
-                        alreadyLoaded,
-                        readyState: video.readyState
-                    });
 
                     if (!alreadyLoaded) {
                         try {
@@ -222,10 +168,6 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
                             if (!cancelled) {
                                 await new Promise<void>((resolve) => {
                                     const handleLoaded = () => {
-                                        console.log('[VideoPlayer:handleLoading] Fallback video loaded', {
-                                            duration: video.duration
-                                        });
-                                        video.removeEventListener('loadedmetadata', handleLoaded);
                                         setDuration(video.duration);
                                         setActiveVideoIndex(1);
                                         resolve();
@@ -245,7 +187,6 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
             }
 
             if (!activeClip) {
-                console.log('[VideoPlayer:handleLoading] No active clip at current time', { currentTime });
                 setDuration(timelineDuration);
                 return;
             }
@@ -256,15 +197,6 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
                 activeVideo?.src &&
                 activeVideo.readyState >= 1;
 
-            console.log('[VideoPlayer:handleLoading] Active video check', {
-                activeVideoIndex,
-                activeClipId: activeClip.id,
-                loadedClipId: activeClipState?.id,
-                isCorrectClipLoaded,
-                hasSrc: !!activeVideo?.src,
-                readyState: activeVideo?.readyState
-            });
-
             if (!isCorrectClipLoaded) {
                 // Check if the inactive video already has this clip loaded
                 const inactiveVideo = inactiveVideoRef.current;
@@ -272,27 +204,12 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
                     inactiveVideo?.src &&
                     inactiveVideo.readyState >= 1;
 
-                console.log('[VideoPlayer:handleLoading] Inactive video check', {
-                    inactiveLoadedClipId: inactiveClipState?.id,
-                    isInInactiveVideo,
-                    hasSrc: !!inactiveVideo?.src,
-                    readyState: inactiveVideo?.readyState
-                });
-
                 if (isInInactiveVideo) {
                     // Switch to the inactive video which already has the clip loaded
                     const newIndex = activeVideoIndex === 1 ? 2 : 1;
-                    console.log('[VideoPlayer:handleLoading] Switching to inactive video', {
-                        from: activeVideoIndex,
-                        to: newIndex
-                    });
                     setActiveVideoIndex(newIndex);
                 } else {
                     // Load the active clip to the active video
-                    console.log('[VideoPlayer:handleLoading] Loading active clip to active video', {
-                        clipId: activeClip.id,
-                        activeVideoIndex
-                    });
                     await loadClipToVideo(
                         activeClip,
                         activeVideoRef,
@@ -311,11 +228,6 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
                     inactiveVideo?.src &&
                     inactiveVideo.readyState >= 1;
 
-                console.log('[VideoPlayer:handleLoading] Preload next clip', {
-                    nextClipId: nextClip.id,
-                    isNextClipLoaded
-                });
-
                 if (!isNextClipLoaded) {
                     loadClipToVideo(
                         nextClip,
@@ -330,11 +242,6 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
             setDuration(timelineDuration);
         };
 
-        console.log('[VideoPlayer:useEffect] Clip loading effect triggered', {
-            activeClipId: activeClip?.id,
-            hasContent,
-            timelineDuration
-        });
         handleLoading();
 
         return () => {
@@ -346,27 +253,13 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
     useEffect(() => {
         const video = activeVideoRef.current;
 
-        console.log('[VideoPlayer:playback] Effect triggered', {
-            hasVideo: !!video,
-            hasSrc: !!video?.src,
-            isPlaying,
-            activeVideoIndex,
-            activeClipId: activeClip?.id,
-            activeClipStateId: activeClipState?.id,
-            currentTime,
-            videoCurrentTime: video?.currentTime,
-            readyState: video?.readyState
-        });
-
         if (!video || !video.src) {
-            console.log('[VideoPlayer:playback] No video or src - skipping');
             return;
         }
 
         // Pause the inactive video
         const inactiveVideo = inactiveVideoRef.current;
         if (inactiveVideo) {
-            console.log('[VideoPlayer:playback] Pausing inactive video');
             inactiveVideo.pause();
         }
 
@@ -376,18 +269,7 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
                 // Only try to play if the correct clip is loaded
                 const sourceTime = getSourceTimeInClip(activeClip, currentTime);
 
-                console.log('[VideoPlayer:playback] Playing', {
-                    clipId: activeClip.id,
-                    sourceTime,
-                    videoCurrentTime: video.currentTime,
-                    needsSeek: Math.abs(video.currentTime - sourceTime) > 0.1
-                });
-
                 if (Math.abs(video.currentTime - sourceTime) > 0.1) {
-                    console.log('[VideoPlayer:playback] Seeking before play', {
-                        from: video.currentTime,
-                        to: sourceTime
-                    });
                     video.currentTime = sourceTime;
                 }
 
@@ -396,13 +278,9 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
                     setPlaying(false);
                 });
             } else {
-                console.log('[VideoPlayer:playback] Clip mismatch - not playing', {
-                    activeClipId: activeClip?.id,
-                    loadedClipId: activeClipState?.id
-                });
+                // Clip mismatch - not playing
             }
         } else {
-            console.log('[VideoPlayer:playback] Pausing');
             video.pause();
         }
     }, [isPlaying, activeVideoIndex, activeClip, activeClipState, currentTime, setPlaying]);
@@ -413,25 +291,11 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
 
         const video = activeVideoRef.current;
 
-        console.log('[VideoPlayer:seeking] Effect triggered', {
-            isPlaying,
-            hasVideo: !!video,
-            activeClipId: activeClip?.id,
-            activeClipStateId: activeClipState?.id,
-            currentTime,
-            videoCurrentTime: video?.currentTime
-        });
-
         if (!video) return;
 
         if (activeClip && activeClipState?.id === activeClip.id) {
             const sourceTime = getSourceTimeInClip(activeClip, currentTime);
             if (Math.abs(video.currentTime - sourceTime) > 0.1) {
-                console.log('[VideoPlayer:seeking] Seeking', {
-                    from: video.currentTime,
-                    to: sourceTime,
-                    clipId: activeClip.id
-                });
                 video.currentTime = sourceTime;
             }
         }
@@ -464,11 +328,6 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
                 const clipEndTime = activeClip.startTime + activeClip.duration;
                 if (timelineTime >= clipEndTime) {
                     // Move to the exact end of this clip and let the next cycle handle the transition
-                    console.log('[VideoPlayer:timeupdate] Reached clip end', {
-                        clipId: activeClip.id,
-                        clipEndTime,
-                        timelineTime
-                    });
                     setCurrentTime(clipEndTime);
                 } else {
                     setCurrentTime(timelineTime);
@@ -477,10 +336,6 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
         };
 
         const handleEnded = () => {
-            console.log('[VideoPlayer:ended] Video ended', {
-                activeClipId: activeClip?.id,
-                hasActiveClip: !!activeClip
-            });
             if (activeClip) {
                 // Move to the end of this clip
                 const clipEndTime = activeClip.startTime + activeClip.duration;
@@ -488,11 +343,6 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
 
                 // Check if we've reached the end of the timeline
                 const timelineDuration = getTimelineDuration(clips);
-                console.log('[VideoPlayer:ended] Checking timeline end', {
-                    clipEndTime,
-                    timelineDuration,
-                    isEnd: clipEndTime >= timelineDuration
-                });
                 if (clipEndTime >= timelineDuration) {
                     setPlaying(false);
                 }
@@ -513,14 +363,9 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
     // Handle playback through blank timeline spaces
     useEffect(() => {
         if (!isPlaying || !hasContent) {
-            console.log('[VideoPlayer:blankSpace] Not running animation frame', {
-                isPlaying,
-                hasContent
-            });
             return;
         }
 
-        console.log('[VideoPlayer:blankSpace] Starting animation frame loop');
         let animationFrameId: number;
         let lastTime = performance.now();
 
@@ -533,15 +378,8 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
                 const newTime = currentTime + deltaTime;
                 const timelineDuration = getTimelineDuration(clips);
 
-                console.log('[VideoPlayer:blankSpace] Advancing through blank space', {
-                    deltaTime,
-                    newTime,
-                    timelineDuration
-                });
-
                 if (newTime >= timelineDuration) {
                     // Reached end of timeline
-                    console.log('[VideoPlayer:blankSpace] Reached timeline end');
                     setPlaying(false);
                     setCurrentTime(timelineDuration);
                 } else {
@@ -559,7 +397,6 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
 
         return () => {
             if (animationFrameId) {
-                console.log('[VideoPlayer:blankSpace] Stopping animation frame loop');
                 cancelAnimationFrame(animationFrameId);
             }
         };
@@ -585,20 +422,6 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
 
     // Debug display state
     useEffect(() => {
-        console.log('[VideoPlayer:display] Display state', {
-            shouldShowVideo,
-            shouldShowBlackScreen,
-            activeVideoIndex,
-            hasActiveClip: !!activeClip,
-            hasContent,
-            hasSrc: !!src,
-            video1HasSrc: !!video1Ref.current?.src,
-            video2HasSrc: !!video2Ref.current?.src,
-            video1ReadyState: video1Ref.current?.readyState,
-            video2ReadyState: video2Ref.current?.readyState,
-            video1Visible: shouldShowVideo && activeVideoIndex === 1,
-            video2Visible: shouldShowVideo && activeVideoIndex === 2
-        });
     }, [shouldShowVideo, shouldShowBlackScreen, activeVideoIndex, activeClip, hasContent, src]);
 
     // Clear timeline clip selection and deselect media when clicking on video player

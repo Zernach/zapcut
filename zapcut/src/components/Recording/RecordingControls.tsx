@@ -19,33 +19,28 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
     const activeUrlRef = useRef<string | null>(null);
 
     useEffect(() => {
-        console.log('[VideoPreview] Component mounted/updated with filePath:', filePath);
     }, [filePath]);
 
     useEffect(() => {
         const loadVideo = async () => {
             try {
                 const trimmedPath = filePath.trim();
-                console.log('Loading video from path:', trimmedPath);
 
                 // Retry logic: try up to 5 times with increasing delays to ensure file is ready
                 let lastError: unknown = '';
                 for (let attempt = 0; attempt < 5; attempt++) {
                     try {
                         const delay = 200 + (attempt * 300); // 200ms, 500ms, 800ms, 1100ms, 1400ms
-                        console.log(`Attempt ${attempt + 1}/5: Waiting ${delay}ms before reading file`);
                         await new Promise(resolve => setTimeout(resolve, delay));
 
                         // Read file as binary via backend command
                         const data = await invoke<number[]>('read_binary_file', { path: trimmedPath });
-                        console.log('Successfully read file, size:', data.length, 'bytes');
 
                         // Convert array to Uint8Array
                         const uint8Array = new Uint8Array(data);
                         // Create a blob URL from the binary data
                         const blob = new Blob([uint8Array], { type: 'video/mp4' });
                         const url = URL.createObjectURL(blob);
-                        console.log('Created blob URL:', url);
 
                         // Revoke the old URL only after we've successfully created the new one
                         if (activeUrlRef.current && activeUrlRef.current !== url) {
@@ -58,7 +53,6 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
                         return; // Success, exit
                     } catch (error) {
                         lastError = error;
-                        console.warn(`Attempt ${attempt + 1}/5 failed:`, error);
                         if (attempt === 4) {
                             throw lastError; // Throw on final attempt
                         }
@@ -66,7 +60,6 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
                 }
             } catch (error) {
                 const errorMessage = `Failed to load video: ${error}`;
-                console.error(errorMessage);
                 setError(errorMessage);
                 setVideoUrl(null);
             }
@@ -93,7 +86,6 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
                 videoRef.current.pause();
             } else {
                 videoRef.current.play().catch((err) => {
-                    console.error('Error playing video:', err);
                     setError(`Failed to play video: ${err.message}`);
                 });
             }
@@ -131,7 +123,6 @@ const VideoPreview: React.FC<{ filePath: string }> = ({ filePath }) => {
             4: 'MEDIA_ERR_SRC_NOT_SUPPORTED - Video format not supported or URL invalid',
         };
         const message = errorMessages[errorCode || 0] || `Video loading error: ${errorCode}`;
-        console.error(`[VideoPreview] ${message}`, { videoUrl, filePath });
         setError(message);
     };
 
@@ -242,7 +233,6 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
             if (canvas) {
                 setLivePreviewCanvas(canvas);
                 setLivePreviewStream(null);
-                console.log('[RecordingControls] Live preview canvas set for PiP recording');
                 return;
             }
 
@@ -254,11 +244,9 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
             if (webcamStream && !displayStream) {
                 setLivePreviewStream(webcamStream);
                 setLivePreviewCanvas(null);
-                console.log('[RecordingControls] Live preview set for webcam-only recording');
             } else if (displayStream) {
                 setLivePreviewStream(displayStream);
                 setLivePreviewCanvas(null);
-                console.log('[RecordingControls] Live preview set for screen recording');
             } else {
                 setLivePreviewCanvas(null);
                 setLivePreviewStream(null);
@@ -281,7 +269,6 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
             previewVideoRef.current.play().catch(err =>
                 console.error('Error playing canvas preview:', err)
             );
-            console.log('[RecordingControls] Canvas preview video stream started');
         }
         // Handle direct stream preview (webcam-only or screen-only)
         else if (livePreviewStream) {
@@ -289,7 +276,6 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
             previewVideoRef.current.play().catch(err =>
                 console.error('Error playing stream preview:', err)
             );
-            console.log('[RecordingControls] Direct stream preview started');
         }
 
         return () => {
@@ -310,18 +296,15 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
         try {
             await startRecording(settings);
         } catch (error) {
-            console.error('Failed to start recording:', error);
             alert(`Failed to start recording: ${error}`);
         }
     };
 
     const handleStopRecording = async () => {
         try {
-            console.log('Stopping recording...');
             await stopRecording();
             // State will update automatically via the hook after processing
         } catch (error) {
-            console.error('Failed to stop recording:', error);
             alert(`Failed to stop recording: ${error}`);
         }
     };
@@ -331,14 +314,12 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
             try {
                 // First, copy the file to the gallery directory via backend
                 const result = await importToGallery(recordingState.output_file);
-                console.log('Import to gallery result:', result);
 
                 // Then, add it to the media store so it appears in the edit screen
                 await importFromPaths([recordingState.output_file]);
 
                 alert('Recording imported to gallery successfully!');
             } catch (error) {
-                console.error('Failed to import to gallery:', error);
                 alert('Failed to import recording to gallery');
             }
         }
@@ -370,7 +351,6 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                     alert('Recording exported successfully!');
                 }
             } catch (error) {
-                console.error('Failed to export recording:', error);
                 alert('Failed to export recording');
             }
         }

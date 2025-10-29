@@ -71,8 +71,6 @@ export const useRecording = () => {
     // Start recording using browser APIs
     const startRecording = useCallback(async (settings: RecordingSettings) => {
         try {
-            console.log('[Recording] Starting browser-based recording with settings:', settings);
-
             // Reset recorded chunks
             recordedChunksRef.current = [];
 
@@ -103,7 +101,6 @@ export const useRecording = () => {
                 const displayStream = await navigator.mediaDevices.getDisplayMedia(displayConstraints);
 
                 displayStreamRef.current = displayStream;
-                console.log('[Recording] Display stream acquired');
 
                 // Add video tracks from display to combined stream
                 displayStream.getVideoTracks().forEach(track => {
@@ -112,7 +109,6 @@ export const useRecording = () => {
 
                 // Handle stream ended (user stopped sharing via browser UI)
                 displayStream.getVideoTracks()[0].onended = () => {
-                    console.log('[Recording] Display track ended (user stopped sharing)');
                     stopRecording();
                 };
             }
@@ -130,7 +126,6 @@ export const useRecording = () => {
                     audioStream.getAudioTracks().forEach(track => {
                         combinedStream.addTrack(track);
                     });
-                    console.log('[Recording] Microphone stream acquired');
                 } catch (audioError) {
                     console.error('[Recording] Failed to get microphone:', audioError);
                     alert('Failed to access microphone. Recording will continue without audio.');
@@ -147,14 +142,12 @@ export const useRecording = () => {
                     };
                     const webcamStream = await navigator.mediaDevices.getUserMedia(webcamConstraints);
                     webcamStreamRef.current = webcamStream;
-                    console.log('[Recording] Webcam stream acquired');
 
                     // If screen recording is NOT enabled, add webcam directly to combined stream
                     if (!settings.screen_recording_enabled) {
                         webcamStream.getVideoTracks().forEach(track => {
                             combinedStream.addTrack(track);
                         });
-                        console.log('[Recording] Webcam tracks added to combined stream (webcam-only mode)');
                     }
                 } catch (webcamError) {
                     console.error('[Recording] Failed to get webcam:', webcamError);
@@ -165,7 +158,6 @@ export const useRecording = () => {
             // Check if we need to composite screen + webcam
             let streamToRecord = combinedStream;
             if (canComposite(displayStreamRef.current, webcamStreamRef.current)) {
-                console.log('[Recording] Creating composited stream with picture-in-picture');
                 try {
                     const compositing = createCompositedStream({
                         screenStream: displayStreamRef.current!,
@@ -190,9 +182,6 @@ export const useRecording = () => {
 
                     streamToRecord = compositedVideoStream;
 
-                    console.log('[Recording] Composited stream created successfully with',
-                        compositedVideoStream.getVideoTracks().length, 'video tracks and',
-                        compositedVideoStream.getAudioTracks().length, 'audio tracks');
                 } catch (compositingError) {
                     console.error('[Recording] Failed to create composited stream:', compositingError);
                     alert('Failed to create picture-in-picture. Recording will continue with screen only.');
@@ -201,7 +190,6 @@ export const useRecording = () => {
 
             // If compositing, wait a moment for the canvas to start rendering frames
             if (compositingRef.current) {
-                console.log('[Recording] Waiting for canvas compositing to initialize...');
                 await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms
             }
 
@@ -213,18 +201,10 @@ export const useRecording = () => {
                     mimeType = 'video/webm';
                 }
             }
-            console.log('[Recording] Using MIME type:', mimeType);
 
             // Verify stream has active tracks before recording
             const videoTracks = streamToRecord.getVideoTracks();
             const audioTracks = streamToRecord.getAudioTracks();
-            console.log('[Recording] Stream has', videoTracks.length, 'video tracks and', audioTracks.length, 'audio tracks');
-            console.log('[Recording] Settings:', {
-                screen: settings.screen_recording_enabled,
-                webcam: settings.webcam_enabled,
-                microphone: settings.microphone_enabled,
-                compositing: !!compositingRef.current
-            });
 
             if (videoTracks.length === 0 && audioTracks.length === 0) {
                 throw new Error(
@@ -245,29 +225,22 @@ export const useRecording = () => {
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data && event.data.size > 0) {
                     recordedChunksRef.current.push(event.data);
-                    console.log('[Recording] Chunk received:', event.data.size, 'bytes');
                 }
             };
 
             // Handle recording stop
             mediaRecorder.onstop = async () => {
-                console.log('[Recording] MediaRecorder stopped, processing', recordedChunksRef.current.length, 'chunks');
-
                 // Create blob from recorded chunks
                 const blob = new Blob(recordedChunksRef.current, { type: mimeType });
-                console.log('[Recording] Total recording size:', blob.size, 'bytes');
 
                 // Convert blob to array buffer and then to byte array
                 const arrayBuffer = await blob.arrayBuffer();
                 const uint8Array = new Uint8Array(arrayBuffer);
                 const byteArray = Array.from(uint8Array);
 
-                console.log('[Recording] Sending', byteArray.length, 'bytes to backend for processing');
-
                 try {
                     // Send to backend for processing
                     const outputFile = await invoke<string>('process_recording', { data: byteArray });
-                    console.log('[Recording] Recording processed successfully:', outputFile);
 
                     // Update state with output file
                     setRecordingState(prev => ({
@@ -293,7 +266,6 @@ export const useRecording = () => {
 
             // Start recording (collect data every second)
             mediaRecorder.start(1000);
-            console.log('[Recording] MediaRecorder started');
 
             // Update local state
             setRecordingState({
@@ -341,11 +313,8 @@ export const useRecording = () => {
     // Stop recording
     const stopRecording = useCallback(async () => {
         try {
-            console.log('[Recording] Stopping recording...');
-
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
                 mediaRecorderRef.current.stop();
-                console.log('[Recording] MediaRecorder stop requested');
             }
 
             // Note: actual state update happens in mediaRecorder.onstop handler

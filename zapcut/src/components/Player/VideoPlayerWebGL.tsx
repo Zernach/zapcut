@@ -7,7 +7,7 @@
  * Usage: Replace VideoPlayer component with this for GPU-accelerated rendering.
  */
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTimelineStore } from '../../store/timelineStore';
 import { useMediaStore } from '../../store/mediaStore';
@@ -20,10 +20,9 @@ import { Plus } from 'lucide-react';
 
 interface VideoPlayerWebGLProps {
     src?: string;
-    autoPlay?: boolean;
 }
 
-export function VideoPlayerWebGL({ autoPlay = false }: VideoPlayerWebGLProps) {
+export function VideoPlayerWebGL({ }: VideoPlayerWebGLProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const compositorRef = useRef<VideoCompositor | null>(null);
 
@@ -51,8 +50,6 @@ export function VideoPlayerWebGL({ autoPlay = false }: VideoPlayerWebGLProps) {
     useEffect(() => {
         if (!canvasRef.current) return;
 
-        console.log('[VideoPlayerWebGL] Initializing compositor');
-
         const compositor = new VideoCompositor({
             canvas: canvasRef.current,
             width: 1920,
@@ -78,7 +75,6 @@ export function VideoPlayerWebGL({ autoPlay = false }: VideoPlayerWebGLProps) {
         });
 
         return () => {
-            console.log('[VideoPlayerWebGL] Cleaning up compositor');
             compositor.destroy();
             cacheManager.destroy();
             memoryMonitor.stop();

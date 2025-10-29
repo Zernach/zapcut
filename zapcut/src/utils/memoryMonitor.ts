@@ -87,19 +87,8 @@ export class MemoryMonitor {
 
         const currentLevel = this.getPressureLevel(stats);
 
-        // Log stats periodically
-        if (Math.random() < 0.1) { // 10% sample rate
-            console.log('[MemoryMonitor]', {
-                used: `${(stats.usedJSHeapSize / 1048576).toFixed(1)}MB`,
-                limit: `${(stats.jsHeapSizeLimit / 1048576).toFixed(1)}MB`,
-                percent: `${stats.usagePercent.toFixed(1)}%`,
-                level: currentLevel
-            });
-        }
-
         // Trigger listeners if level changed
         if (currentLevel !== this.lastPressureLevel) {
-            console.warn(`[MemoryMonitor] Pressure level changed: ${this.lastPressureLevel} → ${currentLevel}`);
             this.notifyListeners(currentLevel);
             this.lastPressureLevel = currentLevel;
         }
@@ -136,7 +125,6 @@ export class MemoryMonitor {
             return;
         }
 
-        console.log('[MemoryMonitor] Starting memory monitoring');
         this.intervalId = window.setInterval(this.checkMemory, this.checkInterval);
 
         // Initial check
@@ -150,7 +138,6 @@ export class MemoryMonitor {
         if (this.intervalId !== null) {
             clearInterval(this.intervalId);
             this.intervalId = null;
-            console.log('[MemoryMonitor] Stopped memory monitoring');
         }
     }
 
@@ -177,7 +164,6 @@ export class MemoryMonitor {
      */
     requestGC(): void {
         if ('gc' in window && typeof (window as any).gc === 'function') {
-            console.log('[MemoryMonitor] Requesting garbage collection');
             (window as any).gc();
         } else {
             console.warn('[MemoryMonitor] Manual GC not available');

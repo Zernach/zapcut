@@ -125,13 +125,9 @@ fn generate_proxy_for_import(
         None
     };
 
-    eprintln!("[Proxy] Generating proxy for: {} ({}x{} @ {:.2}fps)", 
-        video_path, info.width, info.height, info.fps);
-
     create_proxy(video_path, proxy_path.to_str().unwrap(), target_fps)
         .map_err(|e| format!("Failed to generate proxy: {}", e))?;
 
-    eprintln!("[Proxy] Proxy generated successfully: {}", proxy_path.to_string_lossy());
     Ok(proxy_path.to_string_lossy().to_string())
 }
 
@@ -153,12 +149,9 @@ pub async fn get_thumbnail_base64(thumbnail_path: String) -> Result<String, Stri
 pub async fn read_video_file(file_path: String) -> Result<Vec<u8>, String> {
     use std::fs;
     
-    eprintln!("[read_video_file] START - Path: {}", file_path);
-    
     // Check if file exists
     if !Path::new(&file_path).exists() {
         let error = format!("File does not exist at path: {}", file_path);
-        eprintln!("[read_video_file] ERROR: {}", error);
         return Err(error);
     }
     
@@ -166,22 +159,18 @@ pub async fn read_video_file(file_path: String) -> Result<Vec<u8>, String> {
     let metadata = fs::metadata(&file_path)
         .map_err(|e| {
             let error = format!("Failed to read file metadata: {} - Path: {}", e, file_path);
-            eprintln!("[read_video_file] ERROR: {}", error);
             error
         })?;
     
-    let file_size = metadata.len();
-    eprintln!("[read_video_file] File exists - Size: {} bytes ({:.2} MB)", file_size, file_size as f64 / 1_048_576.0);
+    let _file_size = metadata.len();
     
     // Read the video file
     let file_data = fs::read(&file_path)
         .map_err(|e| {
             let error = format!("Failed to read video file: {} - Path: {}", e, file_path);
-            eprintln!("[read_video_file] ERROR: {}", error);
             error
         })?;
     
-    eprintln!("[read_video_file] SUCCESS - Read {} bytes", file_data.len());
     Ok(file_data)
 }
 
@@ -216,14 +205,11 @@ pub async fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
     }
     
     // Get file metadata for debugging
-    match fs::metadata(&path) {
-        Ok(metadata) => {
-            eprintln!("[read_binary_file] File exists - Size: {} bytes", metadata.len());
-        }
-        Err(e) => {
-            return Err(format!("Failed to read file metadata: {} - Path: {}", e, path));
-        }
-    }
+    let _metadata = fs::metadata(&path)
+        .map_err(|e| {
+            let error = format!("Failed to read file metadata: {} - Path: {}", e, path);
+            error
+        })?;
     
     std::fs::read(&path)
         .map_err(|e| format!("Failed to read file: {} - Path: {}", e, path))

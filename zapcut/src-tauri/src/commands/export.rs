@@ -589,8 +589,6 @@ pub async fn export_timeline_optimized(clips: Vec<Clip>, config: ExportConfig) -
         progress.status = "encoding video".to_string();
     }
 
-    eprintln!("[Export] Running optimized single-pass export");
-    
     let output = Command::new(&ffmpeg_path)
         .args(&args)
         .stdout(Stdio::piped())
@@ -612,7 +610,6 @@ pub async fn export_timeline_optimized(clips: Vec<Clip>, config: ExportConfig) -
         progress.status = "complete".to_string();
     }
 
-    eprintln!("[Export] Optimized export completed successfully");
     Ok(config.output_path)
 }
 

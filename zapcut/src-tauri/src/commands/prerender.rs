@@ -26,12 +26,10 @@ pub struct SegmentClip {
 /// This allows seamless playback of complex timelines without real-time compositing
 #[command]
 pub async fn prerender_segment(
-    segment_id: String,
+    _segment_id: String,
     clips: Vec<SegmentClip>,
     output_path: String,
 ) -> Result<String, String> {
-    eprintln!("[Prerender] Starting segment: {}", segment_id);
-    eprintln!("[Prerender] Clips: {}", clips.len());
     
     if clips.is_empty() {
         return Err("No clips to render".to_string());
@@ -60,7 +58,6 @@ fn render_single_clip(
     output_path: &str,
     ffmpeg_path: &PathBuf,
 ) -> Result<String, String> {
-    eprintln!("[Prerender] Rendering single clip");
     
     let mut args = vec![
         "-ss".to_string(),
@@ -103,11 +100,9 @@ fn render_single_clip(
     
     if !output.status.success() {
         let error = String::from_utf8_lossy(&output.stderr);
-        eprintln!("[Prerender] FFmpeg error: {}", error);
         return Err(format!("FFmpeg failed: {}", error));
     }
     
-    eprintln!("[Prerender] Single clip rendered successfully");
     Ok(output_path.to_string())
 }
 
@@ -118,7 +113,6 @@ fn render_multiple_clips(
     ffmpeg_path: &PathBuf,
     _temp_dir: &PathBuf,
 ) -> Result<String, String> {
-    eprintln!("[Prerender] Rendering {} clips with filter_complex", clips.len());
     
     // Build FFmpeg command with multiple inputs and filter_complex
     let mut args = vec![];
@@ -201,8 +195,6 @@ fn render_multiple_clips(
         output_path.to_string(),
     ]);
     
-    eprintln!("[Prerender] Executing FFmpeg with filter_complex");
-    
     let output = Command::new(ffmpeg_path)
         .args(&args)
         .stdout(Stdio::piped())
@@ -212,11 +204,9 @@ fn render_multiple_clips(
     
     if !output.status.success() {
         let error = String::from_utf8_lossy(&output.stderr);
-        eprintln!("[Prerender] FFmpeg error: {}", error);
         return Err(format!("FFmpeg failed: {}", error));
     }
     
-    eprintln!("[Prerender] Multiple clips rendered successfully");
     Ok(output_path.to_string())
 }
 

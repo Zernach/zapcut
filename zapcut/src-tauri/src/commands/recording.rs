@@ -72,7 +72,6 @@ pub async fn process_recording(
     manager: State<'_, RecordingManager>,
     data: Vec<u8>,
 ) -> Result<String, String> {
-    eprintln!("[Recording] Processing {} bytes of WebM data", data.len());
     
     // Generate output filename
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
@@ -96,7 +95,6 @@ pub async fn process_recording(
         .await
         .map_err(|e| format!("Failed to write WebM file: {}", e))?;
     
-    eprintln!("[Recording] WebM file written to: {:?}", webm_path);
     
     // Verify the WebM file was written correctly
     let metadata = fs::metadata(&webm_path)
@@ -107,12 +105,10 @@ pub async fn process_recording(
         return Err("WebM file is empty after writing".to_string());
     }
     
-    eprintln!("[Recording] WebM file size: {} bytes", metadata.len());
     
     // Re-encode to MP4 using FFmpeg for better compression and compatibility
     let ffmpeg_path = get_ffmpeg_path().map_err(|e| format!("FFmpeg not found: {}", e))?;
     
-    eprintln!("[Recording] Re-encoding to MP4...");
     
     // First, try to validate the WebM file with FFprobe
     let ffprobe_path = get_ffmpeg_path()
@@ -128,7 +124,6 @@ pub async fn process_recording(
         });
     
     if let Some(ffprobe) = ffprobe_path {
-        eprintln!("[Recording] Validating WebM file with ffprobe...");
         let probe_output = Command::new(ffprobe)
             .args(&[
                 "-v", "error",

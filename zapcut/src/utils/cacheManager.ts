@@ -74,8 +74,6 @@ export class CacheManager {
             size: blob.size
         });
 
-        console.log(`[CacheManager] Created blob URL for ${clipId} (${this.blobUrls.size}/${this.maxBlobUrls})`);
-
         return url;
     }
 
@@ -95,7 +93,6 @@ export class CacheManager {
         if (entry) {
             URL.revokeObjectURL(entry.url);
             this.blobUrls.delete(clipId);
-            console.log(`[CacheManager] Revoked blob URL for ${clipId}`);
         }
     }
 
@@ -114,7 +111,6 @@ export class CacheManager {
         }
 
         if (oldestId) {
-            console.log(`[CacheManager] Evicting oldest blob: ${oldestId}`);
             this.revokeBlobUrl(oldestId);
         }
     }
@@ -139,7 +135,6 @@ export class CacheManager {
             });
 
             request.onsuccess = () => {
-                console.log(`[CacheManager] Stored proxy in IndexedDB: ${id}`);
                 resolve();
             };
 
@@ -167,7 +162,6 @@ export class CacheManager {
             request.onsuccess = () => {
                 const result = request.result;
                 if (result && result.data) {
-                    console.log(`[CacheManager] Retrieved proxy from IndexedDB: ${id}`);
                     resolve(result.data);
                 } else {
                     resolve(null);
@@ -193,7 +187,6 @@ export class CacheManager {
             const request = store.clear();
 
             request.onsuccess = () => {
-                console.log('[CacheManager] Cleared all proxies from IndexedDB');
                 resolve();
             };
 
@@ -234,8 +227,6 @@ export class CacheManager {
             this.db.close();
             this.db = null;
         }
-
-        console.log('[CacheManager] Destroyed');
     }
 }
 

@@ -34,19 +34,8 @@ export function useMediaImport() {
                 filePaths,
             });
 
-            // Log raw backend response
-            console.log('useMediaImport - Raw backend response:', items);
-
             // Transform snake_case to camelCase
             const transformedItems: MediaItem[] = items.map(item => {
-                console.log('useMediaImport - Processing item:', {
-                    id: item.id,
-                    name: item.name,
-                    file_path: item.file_path,
-                    proxy_path: item.proxy_path,
-                    thumbnail_path: item.thumbnail_path
-                });
-
                 return {
                     id: item.id,
                     name: item.name,
@@ -63,7 +52,6 @@ export function useMediaImport() {
                 };
             });
 
-            console.log('useMediaImport - Transformed items:', transformedItems);
             addItems(transformedItems);
         } catch (error) {
             console.error('Import failed:', error);
@@ -81,19 +69,8 @@ export function useMediaImport() {
                 filePaths,
             });
 
-            // Log raw backend response
-            console.log('useMediaImport (importFromPaths) - Raw backend response:', items);
-
             // Transform snake_case to camelCase
             const transformedItems: MediaItem[] = items.map(item => {
-                console.log('useMediaImport (importFromPaths) - Processing item:', {
-                    id: item.id,
-                    name: item.name,
-                    file_path: item.file_path,
-                    proxy_path: item.proxy_path,
-                    thumbnail_path: item.thumbnail_path
-                });
-
                 return {
                     id: item.id,
                     name: item.name,
@@ -110,7 +87,6 @@ export function useMediaImport() {
                 };
             });
 
-            console.log('useMediaImport (importFromPaths) - Transformed items:', transformedItems);
             addItems(transformedItems);
         } catch (error) {
             console.error('Import failed:', error);

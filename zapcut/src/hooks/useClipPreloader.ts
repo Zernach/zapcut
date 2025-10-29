@@ -104,13 +104,10 @@ export function useClipPreloader({
 
         if (clipsToPreload.length === 0) return;
 
-        console.log(`[Preloader] Mode: ${mode}, Loading ${clipsToPreload.length} clips`);
-
         // Preload clips asynchronously
         isLoadingRef.current = true;
         compositor.preloadClips(clipsToPreload)
             .then(() => {
-                console.log(`[Preloader] Loaded ${clipsToPreload.length} clips`);
             })
             .catch(err => {
                 console.error('[Preloader] Error loading clips:', err);

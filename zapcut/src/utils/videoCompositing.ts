@@ -67,7 +67,6 @@ export function createCompositedStream(options: CompositingOptions): Compositing
         canvas.width = screenVideo.videoWidth;
         canvas.height = screenVideo.videoHeight;
         isInitialized = true;
-        console.log('[Compositing] Canvas initialized:', canvas.width, 'x', canvas.height);
     };
 
     // Calculate webcam overlay dimensions and position
@@ -151,8 +150,6 @@ export function createCompositedStream(options: CompositingOptions): Compositing
 
     // Cleanup function
     const cleanup = () => {
-        console.log('[Compositing] Cleaning up compositing resources');
-
         if (animationFrameId !== null) {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;

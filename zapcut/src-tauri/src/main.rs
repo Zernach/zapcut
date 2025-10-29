@@ -55,8 +55,6 @@ fn main() {
                 // Remove leading '/' to get actual file path
                 let file_path = urlencoding::decode(&path[1..]).unwrap_or_default().to_string();
                 
-                eprintln!("[stream protocol] Requested file: {}", file_path);
-                
                 match fs::read(&file_path) {
                     Ok(data) => {
                         // Detect content type from file extension
@@ -82,11 +80,9 @@ fn main() {
                             .body(data)
                             .unwrap();
                         
-                        eprintln!("[stream protocol] Serving file: {} ({} bytes)", file_path, response.body().len());
                         responder.respond(response);
                     }
-                    Err(e) => {
-                        eprintln!("[stream protocol] ERROR: Failed to read file {}: {}", file_path, e);
+                    Err(_e) => {
                         let response = http::Response::builder()
                             .status(404)
                             .body(Vec::new())
