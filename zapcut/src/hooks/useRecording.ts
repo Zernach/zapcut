@@ -75,7 +75,7 @@ export const useRecording = () => {
             // Get display media (screen capture)
             const displayStream = await navigator.mediaDevices.getDisplayMedia({
                 video: {
-                    // @ts-ignore - mediaSource is valid but not in all type definitions
+                    // @ts-expect-error - mediaSource is valid but not in all type definitions
                     mediaSource: 'screen',
                     width: { ideal: 1920 },
                     height: { ideal: 1080 },
