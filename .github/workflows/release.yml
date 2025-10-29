@@ -211,7 +211,7 @@ jobs:
           # Find the DMG and rename it
           DMG_FILE=$(find dmg -name "*.dmg" | head -n 1)
           if [ -n "$DMG_FILE" ]; then
-            VERSION=$(node -p "require('../../../../../../package.json').version")
+            VERSION=$(node -p "require('../../../../../package.json').version")
             NEW_NAME="ZapCut_${VERSION}_${{ matrix.friendly_name }}.dmg"
             cp "$DMG_FILE" "$NEW_NAME"
             echo "Renamed: $DMG_FILE -> $NEW_NAME"
@@ -221,7 +221,7 @@ jobs:
           # Find the .app.tar.gz and rename it
           APP_TAR=$(find macos -name "*.app.tar.gz" | head -n 1)
           if [ -n "$APP_TAR" ]; then
-            VERSION=$(node -p "require('../../../../../../package.json').version")
+            VERSION=$(node -p "require('../../../../../package.json').version")
             NEW_APP_NAME="ZapCut_${VERSION}_${{ matrix.friendly_name }}.app.tar.gz"
             cp "$APP_TAR" "$NEW_APP_NAME"
             echo "Renamed: $APP_TAR -> $NEW_APP_NAME"
@@ -236,7 +236,7 @@ jobs:
           # Find the MSI and rename it
           $msiFile = Get-ChildItem -Path "msi" -Filter "*.msi" -Recurse | Select-Object -First 1
           if ($msiFile) {
-            $version = (Get-Content "../../../../../../package.json" | ConvertFrom-Json).version
+            $version = (Get-Content "../../../../../package.json" | ConvertFrom-Json).version
             $newName = "ZapCut_${version}_${{ matrix.friendly_name }}.msi"
             Copy-Item $msiFile.FullName -Destination $newName
             Write-Host "Renamed: $($msiFile.Name) -> $newName"
@@ -246,7 +246,7 @@ jobs:
           # Find the NSIS installer and rename it
           $nsisFile = Get-ChildItem -Path "nsis" -Filter "*-setup.exe" -Recurse | Select-Object -First 1
           if ($nsisFile) {
-            $version = (Get-Content "../../../../../../package.json" | ConvertFrom-Json).version
+            $version = (Get-Content "../../../../../package.json" | ConvertFrom-Json).version
             $newName = "ZapCut_${version}_${{ matrix.friendly_name }}-setup.exe"
             Copy-Item $nsisFile.FullName -Destination $newName
             Write-Host "Renamed: $($nsisFile.Name) -> $newName"
@@ -260,7 +260,7 @@ jobs:
           # Find the DEB and rename it
           DEB_FILE=$(find deb -name "*.deb" | head -n 1)
           if [ -n "$DEB_FILE" ]; then
-            VERSION=$(node -p "require('../../../../../../package.json').version")
+            VERSION=$(node -p "require('../../../../../package.json').version")
             NEW_NAME="zapcut_${VERSION}_${{ matrix.friendly_name }}.deb"
             cp "$DEB_FILE" "$NEW_NAME"
             echo "Renamed: $DEB_FILE -> $NEW_NAME"
@@ -270,7 +270,7 @@ jobs:
           # Find the AppImage and rename it
           APPIMAGE_FILE=$(find appimage -name "*.AppImage" | head -n 1)
           if [ -n "$APPIMAGE_FILE" ]; then
-            VERSION=$(node -p "require('../../../../../../package.json').version")
+            VERSION=$(node -p "require('../../../../../package.json').version")
             NEW_NAME="zapcut_${VERSION}_${{ matrix.friendly_name }}.AppImage"
             cp "$APPIMAGE_FILE" "$NEW_NAME"
             echo "Renamed: $APPIMAGE_FILE -> $NEW_NAME"
