@@ -348,7 +348,7 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
             <ol className="list-decimal list-inside text-sm text-gray-300 space-y-1">
                 <li>Open System Settings (or System Preferences)</li>
                 <li>Go to Privacy & Security → Screen Recording</li>
-                <li>Find "ZapCut" in the list and enable it</li>
+                <li>Find &quot;ZapCut&quot; in the list and enable it</li>
                 <li>Restart ZapCut if needed</li>
             </ol>
         </div>

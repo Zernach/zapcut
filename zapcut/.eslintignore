@@ -1,0 +1,6 @@
+node_modules
+dist
+build
+target
+*.config.js
+vite-env.d.ts
