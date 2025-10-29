@@ -201,8 +201,8 @@ jobs:
         run: npm run build
 
       - name: Build Tauri app
-        working-directory: zapcut/src-tauri
-        run: cargo tauri build --target ${{ matrix.target }}
+        working-directory: zapcut
+        run: npm run tauri build -- --target ${{ matrix.target }}
 
       - name: Rename artifacts (macOS)
         if: startsWith(matrix.platform, 'macos')
