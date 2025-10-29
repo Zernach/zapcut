@@ -9,6 +9,14 @@ The project now has two GitHub Actions workflows:
 1. **CI Workflow** (`.github/workflows/ci.yml`) - Runs on PRs and main branch pushes
 2. **Release Workflow** (`.github/workflows/release.yml`) - Builds and publishes releases
 
+### macOS Signing Status
+
+✅ **Intelligent Signing Implemented**: The workflow automatically provides the best possible signing based on available credentials:
+- With full Apple Developer credentials → Full code signing + notarization
+- Without credentials → Ad-hoc signing (users right-click to open)
+
+See the "macOS Code Signing and Notarization" section below for details.
+
 ## CI Workflow
 
 **Triggers:** Push to main, Pull Requests to main
@@ -162,11 +170,114 @@ If you want to build the production app locally with bundled FFmpeg:
 
 The FFmpeg binaries will be automatically included in the app bundle.
 
-## Optional: Code Signing Setup
+## macOS Code Signing and Notarization
 
-For production releases, you should set up code signing:
+### Current Status
 
-### Tauri Updater Signing
+The release workflow is configured with **intelligent signing** that automatically adapts based on available credentials:
+
+- **With Apple Developer credentials**: Full signing + notarization (users can double-click to open)
+- **Without credentials**: Ad-hoc signing (users must right-click → Open on first launch)
+
+### Why This Matters
+
+macOS Gatekeeper blocks apps downloaded from the internet unless they're signed and notarized by Apple. Without proper signing, users see:
+> "ZapCut.app" is damaged and can't be opened.
+
+This is a security feature, not an actual problem with the app.
+
+### Option 1: User Workarounds (Current Builds)
+
+If you download an unsigned or ad-hoc signed build, bypass Gatekeeper using **any** of these methods:
+
+**Method A - Right-Click to Open (Easiest)**
+1. Locate `ZapCut.app` in Finder
+2. Right-click (or Control+click) the app
+3. Select "Open" from the menu
+4. Click "Open" in the security dialog
+5. App will open and be trusted from then on
+
+**Method B - System Settings**
+1. Try to open the app normally (it will be blocked)
+2. Go to System Settings → Privacy & Security
+3. Scroll down to see "ZapCut was blocked..."
+4. Click "Open Anyway"
+5. Confirm in the dialog
+
+**Method C - Terminal Command**
+```bash
+xattr -cr /Applications/ZapCut.app
+# Or if the app is elsewhere:
+xattr -cr /path/to/ZapCut.app
+```
+
+**Important**: These workarounds are **safe** and only needed on first launch. The "damaged" message is misleading — the app works perfectly.
+
+### Option 2: Full Code Signing (Recommended for Production)
+
+To build fully signed and notarized apps that users can double-click to open:
+
+#### Prerequisites
+
+1. **Apple Developer Account** ($99/year)
+   - Enroll at https://developer.apple.com/programs/
+
+2. **Developer ID Application Certificate**
+   - Open Xcode → Settings → Accounts
+   - Select your Apple ID → Manage Certificates
+   - Click + → "Developer ID Application"
+   - Or create via https://developer.apple.com/account/resources/certificates/
+
+3. **Export Certificate as .p12**
+   ```bash
+   # In Keychain Access:
+   # 1. Find your "Developer ID Application" certificate
+   # 2. Right-click → Export "Developer ID Application..."
+   # 3. Save as .p12 with a password
+   ```
+
+4. **App-Specific Password for Notarization**
+   - Visit https://appleid.apple.com
+   - Sign in → Security → App-Specific Passwords
+   - Click + to generate a new password
+   - Save it securely (you'll need it for GitHub Secrets)
+
+5. **Find Your Team ID**
+   - Visit https://developer.apple.com/account
+   - Click "Membership" in sidebar
+   - Copy your 10-character Team ID
+
+#### Add GitHub Secrets
+
+Go to your repository → Settings → Secrets and variables → Actions → New repository secret:
+
+| Secret Name | How to Get Value |
+|------------|------------------|
+| `APPLE_CERTIFICATE` | `base64 -i /path/to/certificate.p12 \| pbcopy` (macOS)<br>Then paste into secret field |
+| `APPLE_CERTIFICATE_PASSWORD` | Password you set when exporting the .p12 |
+| `APPLE_SIGNING_IDENTITY` | Full name from certificate, e.g.:<br>`Developer ID Application: Your Name (TEAM123456)` |
+| `APPLE_ID` | Your Apple ID email address |
+| `APPLE_PASSWORD` | The app-specific password you generated |
+| `APPLE_TEAM_ID` | Your 10-character Team ID from developer.apple.com |
+
+**Note**: The workflow automatically detects these secrets. If all are present, it performs full signing and notarization. If any are missing, it falls back to ad-hoc signing.
+
+#### Verify Signing is Working
+
+After adding secrets and triggering a release:
+
+1. Check the GitHub Actions logs for: ✅ App signed and notarized successfully
+2. Download the DMG from the release
+3. Double-click to open (should work without right-click workaround)
+4. Verify signature locally:
+   ```bash
+   codesign --verify --verbose /Applications/ZapCut.app
+   spctl -a -vvv -t install /Applications/ZapCut.app
+   ```
+
+### Option 3: Tauri Updater Signing (For Auto-Updates)
+
+If you plan to implement auto-updates in the future:
 
 1. Generate a signing keypair:
 ```bash
@@ -177,22 +288,19 @@ npm run tauri signer generate -- -w ~/.tauri/myapp.key
    - `TAURI_SIGNING_PRIVATE_KEY` - The private key content
    - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` - The key password
 
-### macOS Code Signing (Optional)
-
-Uncomment the macOS signing environment variables in `.github/workflows/release.yml` and add these secrets:
-
-- `APPLE_CERTIFICATE` - Your Apple Developer certificate (base64 encoded .p12)
-- `APPLE_CERTIFICATE_PASSWORD` - Certificate password
-- `APPLE_SIGNING_IDENTITY` - Your signing identity
-- `APPLE_ID` - Your Apple ID email
-- `APPLE_PASSWORD` - App-specific password
-- `APPLE_TEAM_ID` - Your Apple Team ID
+This is independent of macOS code signing and used for secure update delivery.
 
 ### Windows Code Signing (Optional)
 
-If you have a Windows code signing certificate, add:
-- `WINDOWS_CERTIFICATE` - Your certificate (base64 encoded .pfx)
-- `WINDOWS_CERTIFICATE_PASSWORD` - Certificate password
+For Windows SmartScreen reputation (reduces "Unknown Publisher" warnings):
+
+1. Obtain a code signing certificate from a Certificate Authority
+2. Export as .pfx file
+3. Add to GitHub Secrets:
+   - `WINDOWS_CERTIFICATE` - Base64 encoded .pfx (`certutil -encode cert.pfx cert.txt` on Windows)
+   - `WINDOWS_CERTIFICATE_PASSWORD` - Certificate password
+
+Note: Windows signing is not yet implemented in the workflow. The workflow would need to be extended similar to macOS signing.
 
 ## Manual Release Trigger
 
@@ -214,6 +322,23 @@ Follow semantic versioning (semver):
 - **Patch** (0.1.1): Bug fixes, backward compatible
 
 ## Troubleshooting
+
+### macOS: "App is damaged and can't be opened"
+
+**Symptom**: When opening ZapCut on macOS, you see:
+> "ZapCut.app" is damaged and can't be opened. You should move it to the Trash.
+
+**Cause**: The app is not code-signed by an Apple Developer certificate. macOS Gatekeeper blocks it for security.
+
+**Solution**: This is **not** a real problem with the app. Choose any fix below:
+
+1. **Right-click the app** → Select "Open" → Click "Open" in the dialog ✅ (Easiest)
+2. **System Settings** → Privacy & Security → Click "Open Anyway"
+3. **Terminal**: `xattr -cr /Applications/ZapCut.app`
+
+After using any method once, the app will open normally from then on.
+
+See the "macOS Code Signing and Notarization" section above for details on implementing full code signing to eliminate this message entirely.
 
 ### App Crashes on Startup or When Importing Videos
 

@@ -108,6 +108,33 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Import Apple Code Signing Certificate
+        if: startsWith(matrix.platform, 'macos') && secrets.APPLE_CERTIFICATE != ''
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: temp-keychain-password
+        run: |
+          echo "Importing Apple Developer certificate..."
+          
+          # Create a temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          
+          # Import certificate to keychain
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          
+          # Allow codesign to access the certificate without prompting
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          
+          # Cleanup
+          rm certificate.p12
+          
+          echo "✅ Certificate imported successfully"
+
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -208,6 +235,57 @@ jobs:
       - name: Build Tauri app
         working-directory: zapcut
         run: npm run tauri build -- --target ${{ matrix.target }}
+
+      - name: Sign macOS App
+        if: startsWith(matrix.platform, 'macos')
+        working-directory: zapcut/src-tauri/target/${{ matrix.target }}/release/bundle/macos
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Check if full signing credentials are available
+          if [ -n "$APPLE_SIGNING_IDENTITY" ] && [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            echo "Full signing credentials found - signing and notarizing..."
+            
+            # Sign the app with hardened runtime
+            codesign --force --options runtime --deep --sign "$APPLE_SIGNING_IDENTITY" ZapCut.app
+            
+            # Create ZIP for notarization
+            ditto -c -k --keepParent ZapCut.app ZapCut.zip
+            
+            # Submit for notarization
+            echo "Submitting for notarization (this may take several minutes)..."
+            xcrun notarytool submit ZapCut.zip \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+            
+            # Staple notarization ticket to the app
+            xcrun stapler staple ZapCut.app
+            
+            # Verify signing
+            codesign --verify --verbose ZapCut.app
+            spctl -a -vvv -t install ZapCut.app
+            
+            # Cleanup
+            rm ZapCut.zip
+            
+            echo "✅ App signed and notarized successfully"
+          else
+            echo "⚠️  No full signing credentials - using ad-hoc signature"
+            echo "Note: Users will need to right-click and select 'Open' on first launch"
+            
+            # Ad-hoc sign (better than nothing)
+            codesign --force --deep --sign - ZapCut.app
+            
+            # Verify ad-hoc signature
+            codesign --verify --verbose ZapCut.app
+            
+            echo "✅ App signed with ad-hoc signature"
+          fi
 
       - name: Rename artifacts (macOS)
         if: startsWith(matrix.platform, 'macos')

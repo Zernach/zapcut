@@ -39,7 +39,10 @@
     "resources": [],
     "macOS": {
       "entitlements": "entitlements.plist",
-      "infoPlist": "Info.plist"
+      "infoPlist": "Info.plist",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "hardenedRuntime": true
     }
   }
 }
