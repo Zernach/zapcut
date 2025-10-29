@@ -58,46 +58,58 @@ jobs:
         if: matrix.platform == 'macos-latest' && matrix.arch == 'aarch64'
         run: |
           cd zapcut/src-tauri/binaries/macos-aarch64
+          echo "Downloading FFmpeg for macOS Apple Silicon..."
           curl -L https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip -o ffmpeg.zip
           curl -L https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip -o ffprobe.zip
           unzip -o ffmpeg.zip
           unzip -o ffprobe.zip
           rm ffmpeg.zip ffprobe.zip
           chmod +x ffmpeg ffprobe
+          ls -lah ffmpeg ffprobe
+          ./ffmpeg -version | head -1
 
       - name: Download FFmpeg binaries (macOS Intel)
         if: matrix.platform == 'macos-latest' && matrix.arch == 'x86_64'
         run: |
           cd zapcut/src-tauri/binaries/macos-x86_64
+          echo "Downloading FFmpeg for macOS Intel..."
           curl -L https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip -o ffmpeg.zip
           curl -L https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip -o ffprobe.zip
           unzip -o ffmpeg.zip
           unzip -o ffprobe.zip
           rm ffmpeg.zip ffprobe.zip
           chmod +x ffmpeg ffprobe
+          ls -lah ffmpeg ffprobe
+          ./ffmpeg -version | head -1
 
       - name: Download FFmpeg binaries (Linux)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           cd zapcut/src-tauri/binaries/linux-x86_64
+          echo "Downloading FFmpeg for Linux..."
           wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
           tar -xf ffmpeg-release-amd64-static.tar.xz
           mv ffmpeg-*-amd64-static/ffmpeg .
           mv ffmpeg-*-amd64-static/ffprobe .
           rm -rf ffmpeg-*-amd64-static*
           chmod +x ffmpeg ffprobe
+          ls -lah ffmpeg ffprobe
+          ./ffmpeg -version | head -1
 
       - name: Download FFmpeg binaries (Windows)
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
           cd zapcut/src-tauri/binaries/windows-x86_64
+          Write-Host "Downloading FFmpeg for Windows..."
           Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "ffmpeg.zip"
           Expand-Archive -Path "ffmpeg.zip" -DestinationPath "."
           $ffmpegDir = Get-ChildItem -Directory -Filter "ffmpeg-*" | Select-Object -First 1
           Move-Item -Path "$($ffmpegDir.FullName)\bin\ffmpeg.exe" -Destination "." -Force
           Move-Item -Path "$($ffmpegDir.FullName)\bin\ffprobe.exe" -Destination "." -Force
           Remove-Item -Recurse -Force $ffmpegDir, "ffmpeg.zip"
+          Get-Item ffmpeg.exe, ffprobe.exe | Format-Table
+          .\ffmpeg.exe -version | Select-Object -First 1
 
       - name: Install frontend dependencies
         run: |

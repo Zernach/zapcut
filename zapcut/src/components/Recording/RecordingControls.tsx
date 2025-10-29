@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRecording, RecordingSettings } from '../../hooks/useRecording';
 import { invoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
+import { useMediaImport } from '../../hooks/useMediaImport';
 
 interface RecordingControlsProps {
     className?: string;
@@ -209,6 +211,8 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
         exportToFile,
     } = useRecording();
 
+    const { importFromPaths } = useMediaImport();
+
     const [settings, setSettings] = useState<RecordingSettings>({
         microphone: undefined,
         microphone_enabled: false,
@@ -252,7 +256,13 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
     const handleImportToGallery = async () => {
         if (recordingState.output_file) {
             try {
-                await importToGallery(recordingState.output_file);
+                // First, copy the file to the gallery directory via backend
+                const result = await importToGallery(recordingState.output_file);
+                console.log('Import to gallery result:', result);
+
+                // Then, add it to the media store so it appears in the edit screen
+                await importFromPaths([recordingState.output_file]);
+
                 alert('Recording imported to gallery successfully!');
             } catch (error) {
                 console.error('Failed to import to gallery:', error);
@@ -264,7 +274,24 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
     const handleExportToFile = async () => {
         if (recordingState.output_file) {
             try {
-                const destination = prompt('Enter destination path:');
+                // Generate default filename from the recording file
+                const defaultFilename = recordingState.output_file
+                    .split('/')
+                    .pop()
+                    ?.split('\\')
+                    .pop() || 'recording.mp4';
+
+                // Open file save dialog
+                const destination = await save({
+                    filters: [
+                        {
+                            name: 'Video',
+                            extensions: ['mp4'],
+                        },
+                    ],
+                    defaultPath: defaultFilename,
+                });
+
                 if (destination) {
                     await exportToFile(recordingState.output_file, destination);
                     alert('Recording exported successfully!');
