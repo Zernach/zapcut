@@ -254,10 +254,45 @@ jobs:
           if [ -n "$APPLE_SIGNING_IDENTITY" ] && [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
             echo "Full signing credentials found - signing and notarizing..."
             
-            # Sign the app with hardened runtime
-            codesign --force --options runtime --deep --sign "$APPLE_SIGNING_IDENTITY" ZapCut.app
+            # Path to entitlements file (relative to workspace root)
+            ENTITLEMENTS_PATH="${GITHUB_WORKSPACE}/zapcut/src-tauri/entitlements.plist"
+            
+            echo "Using entitlements file: $ENTITLEMENTS_PATH"
+            
+            # First, sign all executable binaries inside the app bundle (like FFmpeg)
+            echo "Signing embedded binaries..."
+            find ZapCut.app/Contents/MacOS -type f -perm +111 -not -path "*/ZapCut.app/Contents/MacOS/zapcut" | while read binary; do
+              echo "  Signing: $binary"
+              codesign --force --options runtime \
+                --sign "$APPLE_SIGNING_IDENTITY" \
+                --timestamp \
+                "$binary" || echo "Warning: Failed to sign $binary"
+            done
+            
+            # Sign all .dylib files
+            echo "Signing dynamic libraries..."
+            find ZapCut.app/Contents -name "*.dylib" -type f | while read dylib; do
+              echo "  Signing: $dylib"
+              codesign --force --options runtime \
+                --sign "$APPLE_SIGNING_IDENTITY" \
+                --timestamp \
+                "$dylib" || echo "Warning: Failed to sign $dylib"
+            done
+            
+            # Finally, sign the app bundle itself with entitlements
+            echo "Signing main app bundle..."
+            codesign --force --options runtime \
+              --sign "$APPLE_SIGNING_IDENTITY" \
+              --entitlements "$ENTITLEMENTS_PATH" \
+              --timestamp \
+              ZapCut.app
+            
+            # Verify the signature
+            echo "Verifying signature..."
+            codesign --verify --deep --strict --verbose=2 ZapCut.app
             
             # Create ZIP for notarization
+            echo "Creating archive for notarization..."
             ditto -c -k --keepParent ZapCut.app ZapCut.zip
             
             # Submit for notarization
@@ -268,10 +303,22 @@ jobs:
               --team-id "$APPLE_TEAM_ID" \
               --wait
             
+            # Check notarization status and get detailed logs if it fails
+            SUBMISSION_ID=$(xcrun notarytool history --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" | grep -m1 "id:" | awk '{print $2}')
+            if [ -n "$SUBMISSION_ID" ]; then
+              echo "Getting notarization log for submission: $SUBMISSION_ID"
+              xcrun notarytool log "$SUBMISSION_ID" \
+                --apple-id "$APPLE_ID" \
+                --password "$APPLE_PASSWORD" \
+                --team-id "$APPLE_TEAM_ID" || true
+            fi
+            
             # Staple notarization ticket to the app
+            echo "Stapling notarization ticket..."
             xcrun stapler staple ZapCut.app
             
-            # Verify signing
+            # Final verification
+            echo "Final verification..."
             codesign --verify --verbose ZapCut.app
             spctl -a -vvv -t install ZapCut.app
             

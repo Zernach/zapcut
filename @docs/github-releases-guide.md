@@ -262,6 +262,23 @@ Go to your repository → Settings → Secrets and variables → Actions → New
 
 **Note**: The workflow automatically detects these secrets. If all are present, it performs full signing and notarization. If any are missing, it falls back to ad-hoc signing.
 
+#### How Signing Works
+
+The improved signing process now:
+
+1. **Signs all embedded binaries first** - FFmpeg, ffprobe, and any other executables are signed individually with hardened runtime
+2. **Signs all dynamic libraries** - Any .dylib files in the bundle are signed
+3. **Signs the main app bundle** - The app is signed with proper entitlements including:
+   - Screen capture, camera, and microphone permissions
+   - JIT compilation support (for media processing)
+   - Unsigned executable memory (required by FFmpeg)
+   - Disabled library validation (for bundled binaries)
+4. **Verifies the signature** - Ensures everything is properly signed before notarization
+5. **Submits for notarization** - Sends to Apple's notary service with detailed logging
+6. **Staples the ticket** - Attaches the notarization ticket to the app bundle
+
+This comprehensive approach ensures Apple's notarization service accepts the app.
+
 #### Verify Signing is Working
 
 After adding secrets and triggering a release:
