@@ -116,6 +116,76 @@ jobs:
           cd zapcut
           npm ci
 
+      - name: Update tauri.conf.json with platform-specific FFmpeg binaries
+        shell: bash
+        run: |
+          cd zapcut/src-tauri
+          PLATFORM="${{ matrix.platform }}"
+          ARCH="${{ matrix.arch }}"
+          
+          # Determine which FFmpeg binaries to include for this platform
+          if [[ "$PLATFORM" == "macos-latest" ]]; then
+            if [[ "$ARCH" == "aarch64" ]]; then
+              RESOURCES='["binaries/macos-aarch64/ffmpeg", "binaries/macos-aarch64/ffprobe"]'
+            else
+              RESOURCES='["binaries/macos-x86_64/ffmpeg", "binaries/macos-x86_64/ffprobe"]'
+            fi
+          elif [[ "$PLATFORM" == "ubuntu-22.04" ]]; then
+            RESOURCES='["binaries/linux-x86_64/ffmpeg", "binaries/linux-x86_64/ffprobe"]'
+          elif [[ "$PLATFORM" == "windows-latest" ]]; then
+            RESOURCES='["binaries/windows-x86_64/ffmpeg.exe", "binaries/windows-x86_64/ffprobe.exe"]'
+          fi
+          
+          echo "Platform: $PLATFORM, Arch: $ARCH"
+          echo "Setting resources to: $RESOURCES"
+          
+          # Update tauri.conf.json - use Python for reliable JSON manipulation
+          python3 << 'EOF'
+          import json
+          
+          with open('tauri.conf.json', 'r') as f:
+              config = json.load(f)
+          
+          resources = $RESOURCES
+          config['bundle']['resources'] = resources
+          
+          with open('tauri.conf.json', 'w') as f:
+              json.dump(config, f, indent=2)
+          
+          print(f"Updated resources to: {resources}")
+          EOF
+          
+          echo "Updated tauri.conf.json:"
+          cat tauri.conf.json | grep -A 10 '"resources"'
+
+      - name: Verify FFmpeg binaries exist
+        shell: bash
+        run: |
+          PLATFORM="${{ matrix.platform }}"
+          ARCH="${{ matrix.arch }}"
+          
+          if [[ "$PLATFORM" == "macos-latest" ]]; then
+            if [[ "$ARCH" == "aarch64" ]]; then
+              BIN_DIR="zapcut/src-tauri/binaries/macos-aarch64"
+            else
+              BIN_DIR="zapcut/src-tauri/binaries/macos-x86_64"
+            fi
+          elif [[ "$PLATFORM" == "ubuntu-22.04" ]]; then
+            BIN_DIR="zapcut/src-tauri/binaries/linux-x86_64"
+          elif [[ "$PLATFORM" == "windows-latest" ]]; then
+            BIN_DIR="zapcut/src-tauri/binaries/windows-x86_64"
+          fi
+          
+          echo "Verifying FFmpeg binaries in: $BIN_DIR"
+          ls -lah "$BIN_DIR/" || (echo "Directory not found!" && exit 1)
+          
+          # Verify binaries exist
+          if [[ ! -f "$BIN_DIR/ffmpeg"* ]] && [[ ! -f "$BIN_DIR/ffmpeg.exe" ]]; then
+            echo "❌ ERROR: No FFmpeg binary found in $BIN_DIR"
+            exit 1
+          fi
+          echo "✅ FFmpeg binaries verified"
+  
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:

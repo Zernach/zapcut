@@ -36,16 +36,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "binaries/macos-aarch64/ffmpeg",
-      "binaries/macos-aarch64/ffprobe",
-      "binaries/macos-x86_64/ffmpeg",
-      "binaries/macos-x86_64/ffprobe",
-      "binaries/linux-x86_64/ffmpeg",
-      "binaries/linux-x86_64/ffprobe",
-      "binaries/windows-x86_64/ffmpeg.exe",
-      "binaries/windows-x86_64/ffprobe.exe"
-    ],
+    "resources": [],
     "macOS": {
       "entitlements": "entitlements.plist",
       "infoPlist": "Info.plist"
