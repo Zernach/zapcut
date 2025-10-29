@@ -272,9 +272,20 @@ jobs:
             echo "Removing existing signatures..."
             codesign --remove-signature ZapCut.app/Contents/MacOS/zapcut 2>/dev/null || true
             
-            # First, sign all executable binaries inside the app bundle (like FFmpeg)
-            echo "Signing embedded binaries..."
-            find ZapCut.app/Contents/MacOS -type f -perm +111 -not -path "*/ZapCut.app/Contents/MacOS/zapcut" | while read binary; do
+            # Sign FFmpeg binaries in Resources (critical for notarization)
+            echo "Signing FFmpeg binaries in Resources..."
+            find ZapCut.app/Contents/Resources/binaries -type f 2>/dev/null | while read binary; do
+              echo "  Signing: $binary"
+              codesign --remove-signature "$binary" 2>/dev/null || true
+              codesign --force --options runtime \
+                --sign "$APPLE_SIGNING_IDENTITY" \
+                --timestamp \
+                "$binary"
+            done
+            
+            # Sign all other executable binaries inside the app bundle
+            echo "Signing other embedded binaries..."
+            find ZapCut.app/Contents/MacOS -type f -perm +111 -not -path "*/ZapCut.app/Contents/MacOS/zapcut" 2>/dev/null | while read binary; do
               echo "  Signing: $binary"
               codesign --remove-signature "$binary" 2>/dev/null || true
               codesign --force --options runtime \
@@ -285,7 +296,7 @@ jobs:
             
             # Sign all .dylib files
             echo "Signing dynamic libraries..."
-            find ZapCut.app/Contents -name "*.dylib" -type f | while read dylib; do
+            find ZapCut.app/Contents -name "*.dylib" -type f 2>/dev/null | while read dylib; do
               echo "  Signing: $dylib"
               codesign --remove-signature "$dylib" 2>/dev/null || true
               codesign --force --options runtime \

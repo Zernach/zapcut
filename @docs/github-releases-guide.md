@@ -268,16 +268,17 @@ The improved signing process now:
 
 1. **Builds with ad-hoc signing** - Tauri builds the app with temporary ad-hoc signatures (using `APPLE_SIGNING_IDENTITY="-"`)
 2. **Removes existing signatures** - Clears the ad-hoc signatures before applying proper signatures
-3. **Signs all embedded binaries** - FFmpeg, ffprobe, and any other executables are signed individually with hardened runtime and timestamps
-4. **Signs all dynamic libraries** - Any .dylib files in the bundle are signed with hardened runtime
-5. **Signs the main app bundle** - The app is signed with proper entitlements including:
+3. **Signs FFmpeg binaries first** - Critical: Signs `ffmpeg` and `ffprobe` in `Contents/Resources/binaries/` with hardened runtime and timestamps
+4. **Signs all other embedded binaries** - Any executables in `Contents/MacOS/` are signed with hardened runtime and timestamps
+5. **Signs all dynamic libraries** - Any .dylib files in the bundle are signed with hardened runtime
+6. **Signs the main app bundle** - The app is signed with proper entitlements including:
    - Screen capture, camera, and microphone permissions
    - JIT compilation support (for media processing)
    - Unsigned executable memory (required by FFmpeg)
    - Disabled library validation (for bundled binaries)
-6. **Verifies the signature** - Ensures everything is properly signed before notarization
-7. **Submits for notarization** - Sends to Apple's notary service with detailed logging
-8. **Staples the ticket** - Attaches the notarization ticket to the app bundle
+7. **Verifies the signature** - Ensures everything is properly signed before notarization
+8. **Submits for notarization** - Sends to Apple's notary service with detailed logging
+9. **Staples the ticket** - Attaches the notarization ticket to the app bundle
 
 This comprehensive two-phase approach (build then sign) ensures Apple's notarization service accepts the app and prevents signing conflicts during the build process.
 
