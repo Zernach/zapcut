@@ -140,20 +140,20 @@ jobs:
           echo "Setting resources to: $RESOURCES"
           
           # Update tauri.conf.json - use Python for reliable JSON manipulation
-          python3 << EOF
-import json
-
-with open('tauri.conf.json', 'r') as f:
-    config = json.load(f)
-
-resources = json.loads('''$RESOURCES''')
-config['bundle']['resources'] = resources
-
-with open('tauri.conf.json', 'w') as f:
-    json.dump(config, f, indent=2)
-
-print(f"Updated resources to: {resources}")
-EOF
+          python3 << 'EOF'
+          import json
+          
+          with open('tauri.conf.json', 'r') as f:
+              config = json.load(f)
+          
+          resources = $RESOURCES
+          config['bundle']['resources'] = resources
+          
+          with open('tauri.conf.json', 'w') as f:
+              json.dump(config, f, indent=2)
+          
+          print(f"Updated resources to: {resources}")
+          EOF
           
           echo "Updated tauri.conf.json:"
           cat tauri.conf.json | grep -A 10 '"resources"'
