@@ -23,6 +23,8 @@ lazy_static = "1.4"
 base64 = "0.22"
 libc = "0.2"
 dirs = "5.0"
+urlencoding = "2.1"
+http = "1.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.25"

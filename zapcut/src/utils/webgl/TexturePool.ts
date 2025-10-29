@@ -3,6 +3,8 @@
  * 
  * Manages a pool of WebGL textures for video elements, recycling
  * textures to avoid GPU memory exhaustion and improve performance.
+ * 
+ * Now uses custom stream:// protocol for zero-memory streaming!
  */
 
 export interface TextureEntry {
@@ -30,25 +32,37 @@ export class TexturePool {
         const existing = this.textures.get(clipId);
         if (existing) {
             existing.lastUsed = Date.now();
+            console.log('[TexturePool:getTexture] Using existing texture', {
+                clipId,
+                readyState: existing.videoElement.readyState
+            });
             return existing;
         }
+
+        console.log('[TexturePool:getTexture] Creating new texture', {
+            clipId,
+            videoSrc,
+            currentSize: this.textures.size,
+            maxTextures: this.maxTextures
+        });
 
         // Need to create a new texture
         // First, check if we need to evict old textures
         if (this.textures.size >= this.maxTextures) {
+            console.log('[TexturePool:getTexture] Evicting oldest texture');
             this.evictOldest();
         }
 
-        // Create video element
+        // Create video element with metadata-only preloading
         const video = document.createElement('video');
         video.crossOrigin = 'anonymous';
-        video.preload = 'auto';
+        video.preload = 'metadata'; // Only load metadata, not entire video!
         video.muted = true;
 
         // Create texture
         const texture = this.gl.createTexture();
         if (!texture) {
-            console.error('[TexturePool] Failed to create texture');
+            console.error('[TexturePool:getTexture] Failed to create texture');
             return null;
         }
 
@@ -69,8 +83,10 @@ export class TexturePool {
 
         this.textures.set(clipId, entry);
 
-        // Load video (async)
-        video.src = videoSrc;
+        // Load video with streaming URL (async, zero memory!)
+        const url = `stream://localhost/${encodeURIComponent(videoSrc)}`;
+        console.log('[TexturePool:getTexture] Loading video', { clipId, url });
+        video.src = url;
         video.load();
 
         return entry;
@@ -160,9 +176,10 @@ export class TexturePool {
     }
 
     /**
-     * Preload a video for a clip
+     * Preload a video for a clip (prefers proxy path!)
      */
     async preload(clipId: string, videoSrc: string): Promise<void> {
+        // Use streaming URL directly
         const entry = this.getTexture(clipId, videoSrc);
         if (!entry) return;
 
@@ -170,21 +187,21 @@ export class TexturePool {
             const video = entry.videoElement;
 
             const handleLoaded = () => {
-                video.removeEventListener('loadeddata', handleLoaded);
+                video.removeEventListener('loadedmetadata', handleLoaded);
                 video.removeEventListener('error', handleError);
                 resolve();
             };
 
-            const handleError = (e: Event) => {
-                video.removeEventListener('loadeddata', handleLoaded);
+            const handleError = (_e: Event) => {
+                video.removeEventListener('loadedmetadata', handleLoaded);
                 video.removeEventListener('error', handleError);
                 reject(new Error('Failed to load video'));
             };
 
-            if (video.readyState >= video.HAVE_CURRENT_DATA) {
+            if (video.readyState >= video.HAVE_METADATA) {
                 resolve();
             } else {
-                video.addEventListener('loadeddata', handleLoaded);
+                video.addEventListener('loadedmetadata', handleLoaded);
                 video.addEventListener('error', handleError);
             }
         });

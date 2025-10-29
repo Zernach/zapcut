@@ -45,6 +45,57 @@ fn main() {
             get_prerender_cache_dir,
             clear_prerender_cache,
         ])
+        .register_asynchronous_uri_scheme_protocol("stream", |_app, request, responder| {
+            use std::fs;
+            use http::header::*;
+            
+            tauri::async_runtime::spawn(async move {
+                // Extract file path from the URL
+                let path = request.uri().path();
+                // Remove leading '/' to get actual file path
+                let file_path = urlencoding::decode(&path[1..]).unwrap_or_default().to_string();
+                
+                eprintln!("[stream protocol] Requested file: {}", file_path);
+                
+                match fs::read(&file_path) {
+                    Ok(data) => {
+                        // Detect content type from file extension
+                        let content_type = if file_path.ends_with(".mp4") {
+                            "video/mp4"
+                        } else if file_path.ends_with(".mov") {
+                            "video/quicktime"
+                        } else if file_path.ends_with(".webm") {
+                            "video/webm"
+                        } else if file_path.ends_with(".avi") {
+                            "video/x-msvideo"
+                        } else if file_path.ends_with(".mkv") {
+                            "video/x-matroska"
+                        } else {
+                            "application/octet-stream"
+                        };
+                        
+                        let response = http::Response::builder()
+                            .header(CONTENT_TYPE, content_type)
+                            .header(ACCEPT_RANGES, "bytes")
+                            .header(CONTENT_LENGTH, data.len())
+                            .status(200)
+                            .body(data)
+                            .unwrap();
+                        
+                        eprintln!("[stream protocol] Serving file: {} ({} bytes)", file_path, response.body().len());
+                        responder.respond(response);
+                    }
+                    Err(e) => {
+                        eprintln!("[stream protocol] ERROR: Failed to read file {}: {}", file_path, e);
+                        let response = http::Response::builder()
+                            .status(404)
+                            .body(Vec::new())
+                            .unwrap();
+                        responder.respond(response);
+                    }
+                }
+            });
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

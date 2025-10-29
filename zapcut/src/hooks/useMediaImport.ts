@@ -43,6 +43,7 @@ export function useMediaImport() {
                     id: item.id,
                     name: item.name,
                     file_path: item.file_path,
+                    proxy_path: item.proxy_path,
                     thumbnail_path: item.thumbnail_path
                 });
 
@@ -50,6 +51,7 @@ export function useMediaImport() {
                     id: item.id,
                     name: item.name,
                     filePath: item.file_path,
+                    proxyPath: item.proxy_path,
                     duration: item.duration,
                     width: item.width,
                     height: item.height,
@@ -88,6 +90,7 @@ export function useMediaImport() {
                     id: item.id,
                     name: item.name,
                     file_path: item.file_path,
+                    proxy_path: item.proxy_path,
                     thumbnail_path: item.thumbnail_path
                 });
 
@@ -95,6 +98,7 @@ export function useMediaImport() {
                     id: item.id,
                     name: item.name,
                     filePath: item.file_path,
+                    proxyPath: item.proxy_path,
                     duration: item.duration,
                     width: item.width,
                     height: item.height,

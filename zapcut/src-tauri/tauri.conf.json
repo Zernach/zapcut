@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: file: https://asset.localhost http://localhost:* https://localhost:* asset: https://asset.localhost; media-src 'self' data: blob: file: https://asset.localhost http://localhost:* https://localhost:* asset: https://asset.localhost;",
+      "csp": "default-src 'self'; img-src 'self' data: blob: file: https://asset.localhost http://localhost:* https://localhost:* asset: https://asset.localhost stream:; media-src 'self' data: blob: file: https://asset.localhost http://localhost:* https://localhost:* asset: https://asset.localhost stream:;",
       "dangerousDisableAssetCspModification": false
     }
   },

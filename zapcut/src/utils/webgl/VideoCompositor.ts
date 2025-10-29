@@ -127,43 +127,59 @@ export class VideoCompositor {
     }
 
     /**
-     * Load a clip for rendering (uses proxy if available)
+     * Load a clip for rendering (ALWAYS uses proxy if available for best performance!)
      */
     async loadClip(clip: Clip): Promise<void> {
+        // Prefer proxy for better performance
         const videoPath = clip.proxyPath || clip.filePath;
-
-        console.log('[VideoCompositor] Loading clip:', clip.name, 'using', clip.proxyPath ? 'proxy' : 'original');
 
         try {
             await this.texturePool.preload(clip.id, videoPath);
             this.preloadedClips.add(clip.id);
-            console.log('[VideoCompositor] Clip loaded:', clip.name);
         } catch (error) {
             console.error('[VideoCompositor] Failed to load clip:', clip.name, error);
         }
     }
 
     /**
-     * Set the current clip to render
+     * Set the current clip to render (uses proxy for best performance!)
      */
     setCurrentClip(clip: Clip | null, sourceTime: number = 0): void {
+        console.log('[VideoCompositor:setCurrentClip]', {
+            clipId: clip?.id,
+            clipName: clip?.name,
+            sourceTime,
+            hasProxy: !!clip?.proxyPath
+        });
+
         if (!clip) {
+            console.log('[VideoCompositor:setCurrentClip] Clearing current clip');
             this.currentClip = null;
             this.currentVideoEntry = null;
             return;
         }
 
         this.currentClip = clip;
+        // Prefer proxy path for better performance
         const videoPath = clip.proxyPath || clip.filePath;
 
         // Get texture entry
         this.currentVideoEntry = this.texturePool.getTexture(clip.id, videoPath);
+
+        console.log('[VideoCompositor:setCurrentClip] Got texture entry', {
+            hasEntry: !!this.currentVideoEntry,
+            videoReadyState: this.currentVideoEntry?.videoElement.readyState
+        });
 
         if (this.currentVideoEntry) {
             const video = this.currentVideoEntry.videoElement;
 
             // Seek to correct time
             if (Math.abs(video.currentTime - sourceTime) > 0.1) {
+                console.log('[VideoCompositor:setCurrentClip] Seeking', {
+                    from: video.currentTime,
+                    to: sourceTime
+                });
                 video.currentTime = sourceTime;
             }
         }
@@ -173,11 +189,22 @@ export class VideoCompositor {
      * Play the current clip
      */
     play(): void {
+        console.log('[VideoCompositor:play] Starting playback', {
+            hasVideoEntry: !!this.currentVideoEntry,
+            isRendering: this.isRendering
+        });
+
         if (this.currentVideoEntry) {
             const video = this.currentVideoEntry.videoElement;
-            video.play().catch(err => {
-                console.error('[VideoCompositor] Play failed:', err);
+            console.log('[VideoCompositor:play] Playing video', {
+                readyState: video.readyState,
+                currentTime: video.currentTime
             });
+            video.play().catch((err: unknown) => {
+                console.error('[VideoCompositor:play] Play failed:', err);
+            });
+        } else {
+            console.warn('[VideoCompositor:play] No video entry to play');
         }
 
         if (!this.isRendering) {
@@ -266,6 +293,13 @@ export class VideoCompositor {
 
         // If no current clip or not ready, render black
         if (!this.currentClip || !this.currentVideoEntry) {
+            // Only log this occasionally to avoid spam
+            if (Math.random() < 0.01) {
+                console.log('[VideoCompositor:render] No clip or entry - rendering black', {
+                    hasClip: !!this.currentClip,
+                    hasEntry: !!this.currentVideoEntry
+                });
+            }
             return;
         }
 

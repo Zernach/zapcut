@@ -18,13 +18,15 @@
       "identifier": "dialog:default",
       "allow": []
     },
+    "fs:scope-temp-recursive",
     {
       "identifier": "fs:allow-read-file",
       "allow": [
         { "path": "$HOME/Downloads/**" },
         { "path": "$HOME/Documents/Zapcut/**" },
         { "path": "$TEMP/**" },
-        { "path": "$TMPDIR/**" }
+        { "path": "$TMPDIR/**" },
+        { "path": "$TMP/**" }
       ]
     },
     {

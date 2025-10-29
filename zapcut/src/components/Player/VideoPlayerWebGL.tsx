@@ -17,23 +17,19 @@ import { getActiveClipAtTime, getSourceTimeInClip, getTimelineDuration, hasTimel
 import { getCacheManager } from '../../utils/cacheManager';
 import { getMemoryMonitor } from '../../utils/memoryMonitor';
 import { Plus } from 'lucide-react';
-import { Clip } from '../../types/media';
 
 interface VideoPlayerWebGLProps {
     src?: string;
     autoPlay?: boolean;
 }
 
-export function VideoPlayerWebGL({ src, autoPlay = false }: VideoPlayerWebGLProps) {
+export function VideoPlayerWebGL({ autoPlay = false }: VideoPlayerWebGLProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const compositorRef = useRef<VideoCompositor | null>(null);
-    const [isReady, setIsReady] = useState(false);
 
     const {
         currentTime,
         isPlaying,
-        volume,
-        isMuted,
         setCurrentTime,
         setDuration,
         setPlaying,
@@ -65,7 +61,6 @@ export function VideoPlayerWebGL({ src, autoPlay = false }: VideoPlayerWebGLProp
         });
 
         compositorRef.current = compositor;
-        setIsReady(true);
 
         // Initialize cache manager and memory monitor
         const cacheManager = getCacheManager();

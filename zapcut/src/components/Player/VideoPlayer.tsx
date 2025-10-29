@@ -1,8 +1,7 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useMemo, memo } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTimelineStore } from '../../store/timelineStore';
 import { useMediaStore } from '../../store/mediaStore';
-import { invoke } from '@tauri-apps/api/core';
 import { getActiveClipAtTime, getSourceTimeInClip, getTimelineDuration, hasTimelineContent } from '../../utils/timelineUtils';
 import { Plus, Check, ChevronDown } from 'lucide-react';
 import { Clip } from '../../types/media';
@@ -12,36 +11,22 @@ interface VideoPlayerProps {
     autoPlay?: boolean;
 }
 
-// Helper to load video from backend and create blob URL
-async function loadVideoBlob(filePath: string): Promise<string> {
-    console.log('[loadVideoBlob] START - Path:', filePath);
-
-    try {
-        // Call backend to read video file
-        console.log('[loadVideoBlob] Invoking read_video_file command...');
-        const videoData = await invoke<number[]>('read_video_file', { filePath });
-        console.log('[loadVideoBlob] Received video data - Length:', videoData.length, 'bytes');
-
-        // Convert to Uint8Array
-        const uint8Array = new Uint8Array(videoData);
-        console.log('[loadVideoBlob] Created Uint8Array - Length:', uint8Array.length, 'bytes');
-
-        // Create blob
-        const blob = new Blob([uint8Array], { type: 'video/mp4' });
-        console.log('[loadVideoBlob] Created Blob - Size:', blob.size, 'bytes, Type:', blob.type);
-
-        // Create blob URL
-        const blobUrl = URL.createObjectURL(blob);
-        console.log('[loadVideoBlob] SUCCESS - Blob URL created:', blobUrl);
-
-        return blobUrl;
-    } catch (error) {
-        console.error('[loadVideoBlob] ERROR:', error);
-        throw error;
-    }
+// Helper to get video URL - prefers proxy, uses direct file access (NO memory loading!)
+function getVideoUrl(clip: Clip): string {
+    // Always prefer proxy for better performance
+    const filePath = clip.proxyPath || clip.filePath;
+    // Use custom stream:// protocol for local file access
+    return `stream://localhost/${encodeURIComponent(filePath)}`;
 }
 
-export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
+// Helper for fallback src (if provided)
+function getFallbackUrl(src: string): string {
+    return `stream://localhost/${encodeURIComponent(src)}`;
+}
+
+export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
+    console.log('[VideoPlayer:render] Component rendering', { src, autoPlay });
+
     // Use two video elements for seamless transitions
     const video1Ref = useRef<HTMLVideoElement>(null);
     const video2Ref = useRef<HTMLVideoElement>(null);
@@ -75,29 +60,26 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
     const items = useMediaStore((state) => state.items);
     const selectedItems = items.filter((item) => selectedItemIds.includes(item.id));
 
-    // Determine which clip should be playing at current time
-    const activeClip = getActiveClipAtTime(clips, currentTime);
-    const timelineDuration = getTimelineDuration(clips);
-    const hasContent = hasTimelineContent(clips);
+    // Memoize expensive calculations and debounce to reduce re-renders
+    const debouncedTime = useMemo(() => Math.floor(currentTime * 10) / 10, [currentTime]);
+    const activeClip = useMemo(() => {
+        const clip = getActiveClipAtTime(clips, debouncedTime);
+        console.log('[VideoPlayer:activeClip] Recomputed', {
+            debouncedTime,
+            clipId: clip?.id,
+            clipName: clip?.name,
+            totalClips: clips.length
+        });
+        return clip;
+    }, [clips, debouncedTime]);
+    const timelineDuration = useMemo(() => getTimelineDuration(clips), [clips]);
+    const hasContent = useMemo(() => hasTimelineContent(clips), [clips]);
 
     // Get the active video element
     const activeVideoRef = activeVideoIndex === 1 ? video1Ref : video2Ref;
     const inactiveVideoRef = activeVideoIndex === 1 ? video2Ref : video1Ref;
     const activeClipState = activeVideoIndex === 1 ? video1Clip : video2Clip;
     const inactiveClipState = activeVideoIndex === 1 ? video2Clip : video1Clip;
-
-    // Debug logging
-    useEffect(() => {
-        console.log('VideoPlayer state:', {
-            currentTime,
-            clipsCount: clips.length,
-            hasContent,
-            activeClip: activeClip?.name,
-            activeClipState: activeClipState?.name,
-            timelineDuration,
-            activeVideoIndex
-        });
-    }, [currentTime, clips.length, hasContent, activeClip, activeClipState, timelineDuration, activeVideoIndex]);
 
     // Find the next clip in timeline for preloading
     const getNextClip = (): Clip | null => {
@@ -122,85 +104,68 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
             videoRef: React.RefObject<HTMLVideoElement>,
             setClip: (clip: Clip | null) => void,
             setBlobUrl: (url: string | null) => void,
-            oldBlobUrl: string | null
+            _oldBlobUrl: string | null
         ) => {
-            console.log('[loadClipToVideo] START - Clip:', clip.name, 'Path:', clip.filePath);
-
-            if (!videoRef.current) {
-                console.error('[loadClipToVideo] ERROR: Video ref is null');
+            if (!videoRef.current || !clip.filePath || cancelled) {
+                console.log('[VideoPlayer:loadClipToVideo] Early exit -', {
+                    hasVideoRef: !!videoRef.current,
+                    hasFilePath: !!clip.filePath,
+                    cancelled,
+                    clipId: clip.id
+                });
                 return;
             }
 
-            if (!clip.filePath) {
-                console.error('[loadClipToVideo] ERROR: Clip has no file path');
-                return;
-            }
-
-            if (cancelled) {
-                console.log('[loadClipToVideo] CANCELLED - Operation was cancelled');
-                return;
-            }
+            console.log('[VideoPlayer:loadClipToVideo] Starting load', {
+                clipId: clip.id,
+                clipName: clip.name,
+                hasProxy: !!clip.proxyPath,
+                filePath: clip.filePath,
+                proxyPath: clip.proxyPath
+            });
 
             try {
-                // Revoke old blob URL
-                if (oldBlobUrl) {
-                    console.log('[loadClipToVideo] Revoking old blob URL:', oldBlobUrl);
-                    URL.revokeObjectURL(oldBlobUrl);
-                }
-
-                // Load new video
-                console.log('[loadClipToVideo] Loading video blob...');
-                const blobUrl = await loadVideoBlob(clip.filePath);
-
-                if (cancelled) {
-                    console.log('[loadClipToVideo] CANCELLED after loading - Revoking blob URL');
-                    URL.revokeObjectURL(blobUrl);
-                    return;
-                }
-
-                console.log('[loadClipToVideo] Setting blob URL in state');
-                setBlobUrl(blobUrl);
-
                 const video = videoRef.current;
-                if (!video) {
-                    console.error('[loadClipToVideo] ERROR: Video element became null');
-                    return;
-                }
+
+                // Get streaming URL (uses proxy if available, zero RAM!)
+                const videoUrl = getVideoUrl(clip);
+                console.log('[VideoPlayer:loadClipToVideo] Generated URL', { clipId: clip.id, videoUrl });
+                setBlobUrl(videoUrl);
 
                 if (cancelled) {
-                    console.log('[loadClipToVideo] CANCELLED before setting src');
+                    console.log('[VideoPlayer:loadClipToVideo] Cancelled after URL generation', { clipId: clip.id });
                     return;
                 }
 
-                console.log('[loadClipToVideo] Setting video.src to blob URL');
-                video.src = blobUrl;
+                // Set src and load metadata only
+                video.src = videoUrl;
+                video.preload = 'metadata'; // Only load metadata, not entire video!
+                console.log('[VideoPlayer:loadClipToVideo] Set video src and starting load', {
+                    clipId: clip.id,
+                    readyState: video.readyState
+                });
 
-                console.log('[loadClipToVideo] Calling video.load() and waiting for metadata...');
                 await new Promise<void>((resolve, reject) => {
                     const handleLoaded = () => {
-                        console.log('[loadClipToVideo] Metadata loaded!', {
+                        console.log('[VideoPlayer:loadClipToVideo] Metadata loaded successfully', {
+                            clipId: clip.id,
                             duration: video.duration,
-                            videoWidth: video.videoWidth,
-                            videoHeight: video.videoHeight,
-                            readyState: video.readyState,
-                            networkState: video.networkState
+                            readyState: video.readyState
                         });
                         video.removeEventListener('loadedmetadata', handleLoaded);
                         video.removeEventListener('error', handleError);
                         if (!cancelled) {
                             setClip(clip);
-                            console.log('[loadClipToVideo] SUCCESS - Clip loaded:', clip.name);
                         }
                         resolve();
                     };
 
                     const handleError = (e: Event) => {
                         const videoEl = e.target as HTMLVideoElement;
-                        console.error('[loadClipToVideo] Video error event:', {
-                            error: videoEl.error,
-                            code: videoEl.error?.code,
-                            message: videoEl.error?.message,
-                            src: videoEl.src
+                        console.error('[VideoPlayer:loadClipToVideo] Video load error', {
+                            clipId: clip.id,
+                            error: videoEl.error?.message || 'Unknown error',
+                            code: videoEl.error?.code
                         });
                         video.removeEventListener('loadedmetadata', handleLoaded);
                         video.removeEventListener('error', handleError);
@@ -213,41 +178,56 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
                 });
             } catch (error) {
                 if (!cancelled) {
-                    console.error('[loadClipToVideo] ERROR:', error);
+                    console.error('[VideoPlayer:loadClipToVideo] Error loading clip:', {
+                        clipId: clip.id,
+                        error
+                    });
                 }
             }
         };
 
         const handleLoading = async () => {
-            console.log('[handleLoading] START - hasContent:', hasContent, 'activeClip:', activeClip?.name, 'currentTime:', currentTime);
-
             if (cancelled) {
-                console.log('[handleLoading] CANCELLED');
+                console.log('[VideoPlayer:handleLoading] Cancelled - exiting');
                 return;
             }
 
+            console.log('[VideoPlayer:handleLoading] Starting', {
+                hasContent,
+                activeClipId: activeClip?.id,
+                activeClipName: activeClip?.name,
+                src
+            });
+
             if (!hasContent) {
-                console.log('[handleLoading] No timeline content - checking fallback video');
+                console.log('[VideoPlayer:handleLoading] No timeline content');
                 // No timeline content - handle fallback video if provided
                 if (src && video1Ref.current) {
                     const video = video1Ref.current;
-                    // Check if already loaded - compare current src with expected
-                    const currentSrc = video.src;
-                    const alreadyLoaded = currentSrc && currentSrc.startsWith('blob:') && video.readyState >= 1;
-                    console.log('[handleLoading] Fallback video - src:', src, 'alreadyLoaded:', alreadyLoaded, 'readyState:', video.readyState);
+                    const videoUrl = getFallbackUrl(src);
+                    const alreadyLoaded = video.src === videoUrl && video.readyState >= 1;
+
+                    console.log('[VideoPlayer:handleLoading] Fallback video', {
+                        videoUrl,
+                        alreadyLoaded,
+                        readyState: video.readyState
+                    });
+
                     if (!alreadyLoaded) {
                         try {
-                            console.log('[handleLoading] Loading fallback video...');
-                            const blobUrl = await loadVideoBlob(src);
+                            setVideo1BlobUrl(videoUrl);
+                            video.src = videoUrl;
+                            video.preload = 'metadata';
+
                             if (!cancelled) {
-                                setVideo1BlobUrl(blobUrl);
-                                video.src = blobUrl;
                                 await new Promise<void>((resolve) => {
                                     const handleLoaded = () => {
+                                        console.log('[VideoPlayer:handleLoading] Fallback video loaded', {
+                                            duration: video.duration
+                                        });
                                         video.removeEventListener('loadedmetadata', handleLoaded);
                                         setDuration(video.duration);
                                         setActiveVideoIndex(1);
-                                        console.log('[handleLoading] Fallback video loaded - duration:', video.duration);
                                         resolve();
                                     };
                                     video.addEventListener('loadedmetadata', handleLoaded);
@@ -255,49 +235,64 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
                                 });
                             }
                         } catch (error) {
-                            console.error('[handleLoading] Failed to load fallback video:', error);
+                            console.error('[VideoPlayer:handleLoading] Failed to load fallback video:', error);
                         }
                     }
                 } else {
-                    console.log('[handleLoading] No fallback video available');
                     setDuration(0);
                 }
                 return;
             }
 
             if (!activeClip) {
-                console.log('[handleLoading] Timeline has content but no active clip at current time');
+                console.log('[VideoPlayer:handleLoading] No active clip at current time', { currentTime });
                 setDuration(timelineDuration);
                 return;
             }
-
-            console.log('[handleLoading] Active clip:', activeClip.name, 'activeClipState:', activeClipState?.name, 'activeVideoIndex:', activeVideoIndex);
 
             // Check if active video already has the correct clip loaded
             const activeVideo = activeVideoRef.current;
             const isCorrectClipLoaded = activeClipState?.id === activeClip.id &&
                 activeVideo?.src &&
-                activeVideo.src.startsWith('blob:') &&
                 activeVideo.readyState >= 1;
 
-            console.log('[handleLoading] isCorrectClipLoaded:', isCorrectClipLoaded, 'readyState:', activeVideo?.readyState);
+            console.log('[VideoPlayer:handleLoading] Active video check', {
+                activeVideoIndex,
+                activeClipId: activeClip.id,
+                loadedClipId: activeClipState?.id,
+                isCorrectClipLoaded,
+                hasSrc: !!activeVideo?.src,
+                readyState: activeVideo?.readyState
+            });
 
             if (!isCorrectClipLoaded) {
                 // Check if the inactive video already has this clip loaded
                 const inactiveVideo = inactiveVideoRef.current;
                 const isInInactiveVideo = inactiveClipState?.id === activeClip.id &&
                     inactiveVideo?.src &&
-                    inactiveVideo.src.startsWith('blob:') &&
                     inactiveVideo.readyState >= 1;
+
+                console.log('[VideoPlayer:handleLoading] Inactive video check', {
+                    inactiveLoadedClipId: inactiveClipState?.id,
+                    isInInactiveVideo,
+                    hasSrc: !!inactiveVideo?.src,
+                    readyState: inactiveVideo?.readyState
+                });
 
                 if (isInInactiveVideo) {
                     // Switch to the inactive video which already has the clip loaded
                     const newIndex = activeVideoIndex === 1 ? 2 : 1;
-                    console.log('[handleLoading] Switching to preloaded video - from index', activeVideoIndex, 'to', newIndex);
+                    console.log('[VideoPlayer:handleLoading] Switching to inactive video', {
+                        from: activeVideoIndex,
+                        to: newIndex
+                    });
                     setActiveVideoIndex(newIndex);
                 } else {
-                    console.log('[handleLoading] Loading active clip to active video...');
                     // Load the active clip to the active video
+                    console.log('[VideoPlayer:handleLoading] Loading active clip to active video', {
+                        clipId: activeClip.id,
+                        activeVideoIndex
+                    });
                     await loadClipToVideo(
                         activeClip,
                         activeVideoRef,
@@ -306,8 +301,6 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
                         activeVideoIndex === 1 ? video1BlobUrl : video2BlobUrl
                     );
                 }
-            } else {
-                console.log('[handleLoading] Active clip already loaded in active video - skipping load');
             }
 
             // Preload next clip to inactive video if available
@@ -316,13 +309,14 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
                 const inactiveVideo = inactiveVideoRef.current;
                 const isNextClipLoaded = inactiveClipState?.id === nextClip.id &&
                     inactiveVideo?.src &&
-                    inactiveVideo.src.startsWith('blob:') &&
                     inactiveVideo.readyState >= 1;
 
-                console.log('[handleLoading] Next clip available:', nextClip.name, 'isNextClipLoaded:', isNextClipLoaded);
+                console.log('[VideoPlayer:handleLoading] Preload next clip', {
+                    nextClipId: nextClip.id,
+                    isNextClipLoaded
+                });
 
                 if (!isNextClipLoaded) {
-                    console.log('[handleLoading] Preloading next clip to inactive video...');
                     loadClipToVideo(
                         nextClip,
                         inactiveVideoRef,
@@ -330,17 +324,17 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
                         activeVideoIndex === 1 ? setVideo2BlobUrl : setVideo1BlobUrl,
                         activeVideoIndex === 1 ? video2BlobUrl : video1BlobUrl
                     );
-                } else {
-                    console.log('[handleLoading] Next clip already preloaded - skipping');
                 }
-            } else {
-                console.log('[handleLoading] No next clip to preload');
             }
 
             setDuration(timelineDuration);
-            console.log('[handleLoading] COMPLETE - duration set to:', timelineDuration);
         };
 
+        console.log('[VideoPlayer:useEffect] Clip loading effect triggered', {
+            activeClipId: activeClip?.id,
+            hasContent,
+            timelineDuration
+        });
         handleLoading();
 
         return () => {
@@ -352,66 +346,63 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
     useEffect(() => {
         const video = activeVideoRef.current;
 
-        console.log('[Playback Effect] Triggered:', {
+        console.log('[VideoPlayer:playback] Effect triggered', {
+            hasVideo: !!video,
+            hasSrc: !!video?.src,
             isPlaying,
-            activeClip: activeClip?.name,
-            activeClipState: activeClipState?.name,
             activeVideoIndex,
-            hasVideoElement: !!video,
-            videoSrc: video?.src,
-            videoReadyState: video?.readyState,
-            currentTime
+            activeClipId: activeClip?.id,
+            activeClipStateId: activeClipState?.id,
+            currentTime,
+            videoCurrentTime: video?.currentTime,
+            readyState: video?.readyState
         });
 
-        if (!video) {
-            console.warn('[Playback Effect] No video element available');
-            return;
-        }
-
-        if (!video.src) {
-            console.warn('[Playback Effect] Video element has no src');
+        if (!video || !video.src) {
+            console.log('[VideoPlayer:playback] No video or src - skipping');
             return;
         }
 
         // Pause the inactive video
         const inactiveVideo = inactiveVideoRef.current;
         if (inactiveVideo) {
-            console.log('[Playback Effect] Pausing inactive video');
+            console.log('[VideoPlayer:playback] Pausing inactive video');
             inactiveVideo.pause();
         }
 
         // Handle playback
         if (isPlaying) {
-            console.log('[Playback Effect] User wants to play');
             if (activeClip && activeClipState?.id === activeClip.id) {
-                console.log('[Playback Effect] Correct clip is loaded - starting playback');
                 // Only try to play if the correct clip is loaded
                 const sourceTime = getSourceTimeInClip(activeClip, currentTime);
-                console.log('[Playback Effect] Source time calculated:', sourceTime, 'video.currentTime:', video.currentTime);
+
+                console.log('[VideoPlayer:playback] Playing', {
+                    clipId: activeClip.id,
+                    sourceTime,
+                    videoCurrentTime: video.currentTime,
+                    needsSeek: Math.abs(video.currentTime - sourceTime) > 0.1
+                });
 
                 if (Math.abs(video.currentTime - sourceTime) > 0.1) {
-                    console.log('[Playback Effect] Seeking to:', sourceTime);
+                    console.log('[VideoPlayer:playback] Seeking before play', {
+                        from: video.currentTime,
+                        to: sourceTime
+                    });
                     video.currentTime = sourceTime;
                 }
 
-                console.log('[Playback Effect] Calling video.play()...');
-                video.play()
-                    .then(() => {
-                        console.log('[Playback Effect] video.play() SUCCESS');
-                    })
-                    .catch((err) => {
-                        console.error('[Playback Effect] video.play() ERROR:', err);
-                        setPlaying(false);
-                    });
+                video.play().catch((err) => {
+                    console.error('[VideoPlayer:playback] Play failed:', err);
+                    setPlaying(false);
+                });
             } else {
-                console.warn('[Playback Effect] Cannot play - clip not loaded yet:', {
-                    hasActiveClip: !!activeClip,
-                    hasActiveClipState: !!activeClipState,
-                    idsMatch: activeClipState?.id === activeClip?.id
+                console.log('[VideoPlayer:playback] Clip mismatch - not playing', {
+                    activeClipId: activeClip?.id,
+                    loadedClipId: activeClipState?.id
                 });
             }
         } else {
-            console.log('[Playback Effect] User wants to pause');
+            console.log('[VideoPlayer:playback] Pausing');
             video.pause();
         }
     }, [isPlaying, activeVideoIndex, activeClip, activeClipState, currentTime, setPlaying]);
@@ -421,11 +412,26 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
         if (isPlaying) return; // Don't seek during playback
 
         const video = activeVideoRef.current;
+
+        console.log('[VideoPlayer:seeking] Effect triggered', {
+            isPlaying,
+            hasVideo: !!video,
+            activeClipId: activeClip?.id,
+            activeClipStateId: activeClipState?.id,
+            currentTime,
+            videoCurrentTime: video?.currentTime
+        });
+
         if (!video) return;
 
         if (activeClip && activeClipState?.id === activeClip.id) {
             const sourceTime = getSourceTimeInClip(activeClip, currentTime);
             if (Math.abs(video.currentTime - sourceTime) > 0.1) {
+                console.log('[VideoPlayer:seeking] Seeking', {
+                    from: video.currentTime,
+                    to: sourceTime,
+                    clipId: activeClip.id
+                });
                 video.currentTime = sourceTime;
             }
         }
@@ -458,6 +464,11 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
                 const clipEndTime = activeClip.startTime + activeClip.duration;
                 if (timelineTime >= clipEndTime) {
                     // Move to the exact end of this clip and let the next cycle handle the transition
+                    console.log('[VideoPlayer:timeupdate] Reached clip end', {
+                        clipId: activeClip.id,
+                        clipEndTime,
+                        timelineTime
+                    });
                     setCurrentTime(clipEndTime);
                 } else {
                     setCurrentTime(timelineTime);
@@ -466,6 +477,10 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
         };
 
         const handleEnded = () => {
+            console.log('[VideoPlayer:ended] Video ended', {
+                activeClipId: activeClip?.id,
+                hasActiveClip: !!activeClip
+            });
             if (activeClip) {
                 // Move to the end of this clip
                 const clipEndTime = activeClip.startTime + activeClip.duration;
@@ -473,6 +488,11 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
 
                 // Check if we've reached the end of the timeline
                 const timelineDuration = getTimelineDuration(clips);
+                console.log('[VideoPlayer:ended] Checking timeline end', {
+                    clipEndTime,
+                    timelineDuration,
+                    isEnd: clipEndTime >= timelineDuration
+                });
                 if (clipEndTime >= timelineDuration) {
                     setPlaying(false);
                 }
@@ -492,8 +512,15 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
 
     // Handle playback through blank timeline spaces
     useEffect(() => {
-        if (!isPlaying || !hasContent) return;
+        if (!isPlaying || !hasContent) {
+            console.log('[VideoPlayer:blankSpace] Not running animation frame', {
+                isPlaying,
+                hasContent
+            });
+            return;
+        }
 
+        console.log('[VideoPlayer:blankSpace] Starting animation frame loop');
         let animationFrameId: number;
         let lastTime = performance.now();
 
@@ -506,8 +533,15 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
                 const newTime = currentTime + deltaTime;
                 const timelineDuration = getTimelineDuration(clips);
 
+                console.log('[VideoPlayer:blankSpace] Advancing through blank space', {
+                    deltaTime,
+                    newTime,
+                    timelineDuration
+                });
+
                 if (newTime >= timelineDuration) {
                     // Reached end of timeline
+                    console.log('[VideoPlayer:blankSpace] Reached timeline end');
                     setPlaying(false);
                     setCurrentTime(timelineDuration);
                 } else {
@@ -525,6 +559,7 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
 
         return () => {
             if (animationFrameId) {
+                console.log('[VideoPlayer:blankSpace] Stopping animation frame loop');
                 cancelAnimationFrame(animationFrameId);
             }
         };
@@ -547,6 +582,24 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
     const shouldShowVideo = activeClip || (!hasContent && src);
     const shouldShowBlackScreen = hasContent && !activeClip;
     const displayMessage = 'No video selected';
+
+    // Debug display state
+    useEffect(() => {
+        console.log('[VideoPlayer:display] Display state', {
+            shouldShowVideo,
+            shouldShowBlackScreen,
+            activeVideoIndex,
+            hasActiveClip: !!activeClip,
+            hasContent,
+            hasSrc: !!src,
+            video1HasSrc: !!video1Ref.current?.src,
+            video2HasSrc: !!video2Ref.current?.src,
+            video1ReadyState: video1Ref.current?.readyState,
+            video2ReadyState: video2Ref.current?.readyState,
+            video1Visible: shouldShowVideo && activeVideoIndex === 1,
+            video2Visible: shouldShowVideo && activeVideoIndex === 2
+        });
+    }, [shouldShowVideo, shouldShowBlackScreen, activeVideoIndex, activeClip, hasContent, src]);
 
     // Clear timeline clip selection and deselect media when clicking on video player
     const clearSelection = useTimelineStore((state) => state.clearSelection);
@@ -772,5 +825,5 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
             )}
         </div>
     );
-}
+});
 

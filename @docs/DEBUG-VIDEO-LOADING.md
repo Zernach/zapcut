@@ -1,128 +1,270 @@
 # Video Loading Debug Guide
 
 ## Overview
-Comprehensive debug logging has been added throughout the entire video loading and playback pipeline to identify issues with the video preview.
+Comprehensive debug logging has been added throughout the entire video loading and playback pipeline to identify the black screen issue and any potential infinite loops.
+
+**Date Added**: October 29, 2025
+**Issue**: Video preview shows black screen when pressing play - suspected infinite loop
+
+## ✅ ISSUE RESOLVED (3 FIXES REQUIRED)
+
+### Fix #1: Missing proxyPath Mapping
+**Root Cause**: The `proxyPath` field was not being mapped from the backend response (`proxy_path`) to the frontend MediaItem format.
+
+**Fix Applied**: Updated `useMediaImport.ts` to include `proxyPath: item.proxy_path` in the transformation mapping.
+
+### Fix #2: Tauri v2 Asset Protocol Limitations
+**Root Cause**: Tauri v2's `convertFileSrc` is designed for bundled assets only, not arbitrary filesystem paths. It doesn't have permission configuration for user directories, causing "unsupported URL" errors (Error Code 4: MEDIA_ERR_SRC_NOT_SUPPORTED) when trying to load videos from Downloads or temp directories.
+
+**Fix Applied**: Implemented a custom `stream://` protocol handler in Rust that serves local video files with proper HTTP headers for streaming:
+- Registered custom protocol in `main.rs` using `.register_asynchronous_uri_scheme_protocol()`
+- Updated CSP in `tauri.conf.json` to allow `stream:` protocol
+- Replaced all `convertFileSrc()` calls with `stream://localhost/` URLs
+- Added `urlencoding` and `http` dependencies to Cargo.toml
+
+### Fix #3: Frontend URL Generation
+**Root Cause**: Multiple files were using `convertFileSrc` which doesn't work for user files in Tauri v2.
+
+**Fix Applied**: Replaced `convertFileSrc` with custom URL generation across the codebase:
+```typescript
+// Old (broken):
+const url = convertFileSrc(filePath);
+
+// New (working):
+const url = `stream://localhost/${encodeURIComponent(filePath)}`;
+```
+
+**Files Modified**:
+- `/src-tauri/src/main.rs` - Added custom stream:// protocol handler
+- `/src-tauri/Cargo.toml` - Added urlencoding and http dependencies
+- `/src-tauri/tauri.conf.json` - Updated CSP to allow stream: protocol
+- `/src/hooks/useMediaImport.ts` - Added proxyPath mapping
+- `/src/components/Player/VideoPlayer.tsx` - Replaced convertFileSrc with stream:// URLs
+- `/src/utils/webgl/TexturePool.ts` - Replaced convertFileSrc with stream:// URLs
+- `/src/utils/videoURLManager.ts` - Replaced convertFileSrc with stream:// URLs
+
+**⚠️ Important**: After modifying Tauri configuration and Rust code, you must **restart the dev server** for changes to take effect.
+
+---
 
 ## How to Debug
 
-1. **Open the app in dev mode**: Run `npm run tauri dev`
+1. **Open the app in dev mode**: Run `npm run tauri:dev`
 2. **Open Browser DevTools**: Right-click and select "Inspect" or press `Cmd+Option+I`
 3. **Open the Console tab**: This is where all logs will appear
-4. **Check the Terminal**: Backend logs (Rust) will appear in the terminal where you ran the dev command
+4. **Filter logs**: Type `[VideoPlayer` in the console filter to see only video-related logs
 
 ## Log Categories
 
-### 🔴 Backend Logs (Rust - Terminal Output)
-
-#### `[read_video_file]` - Video File Reading
-Located in: `src-tauri/src/commands/media.rs`
-
-```
-[read_video_file] START - Path: /path/to/video.mp4
-[read_video_file] File exists - Size: 1234567 bytes (1.18 MB)
-[read_video_file] SUCCESS - Read 1234567 bytes
-```
-
-**Errors to watch for:**
-- `File does not exist at path:` - File path is wrong or file was deleted
-- `Failed to read file metadata:` - Permission issues or file is locked
-- `Failed to read video file:` - I/O error reading the file
-
----
+All logs are prefixed with their location for easy tracking:
 
 ### 🔵 Frontend Logs (JavaScript - Browser Console)
 
-#### `[loadVideoBlob]` - Blob Creation from Backend Data
-Located in: `src/components/Player/VideoPlayer.tsx`
-
+#### `[VideoPlayer:render]` - Component Rendering
 ```
-[loadVideoBlob] START - Path: /path/to/video.mp4
-[loadVideoBlob] Invoking read_video_file command...
-[loadVideoBlob] Received video data - Length: 1234567 bytes
-[loadVideoBlob] Created Uint8Array - Length: 1234567 bytes
-[loadVideoBlob] Created Blob - Size: 1234567 bytes, Type: video/mp4
-[loadVideoBlob] SUCCESS - Blob URL created: blob:http://localhost:1420/...
+[VideoPlayer:render] Component rendering { src: undefined, autoPlay: false }
 ```
-
-**Errors to watch for:**
-- `ERROR:` - Failed to invoke backend command or data conversion failed
+Shows when the component re-renders. Watch for excessive re-renders (infinite loop indicator).
 
 ---
 
-#### `[loadClipToVideo]` - Loading Clip into Video Element
+#### `[VideoPlayer:activeClip]` - Active Clip Calculation
 ```
-[loadClipToVideo] START - Clip: MyVideo.mp4 Path: /path/to/video.mp4
-[loadClipToVideo] Loading video blob...
-[loadClipToVideo] Setting blob URL in state
-[loadClipToVideo] Setting video.src to blob URL
-[loadClipToVideo] Calling video.load() and waiting for metadata...
-[loadClipToVideo] Metadata loaded! { duration: 10.5, videoWidth: 1920, videoHeight: 1080, readyState: 4, networkState: 2 }
-[loadClipToVideo] SUCCESS - Clip loaded: MyVideo.mp4
+[VideoPlayer:activeClip] Recomputed { 
+  debouncedTime: 0, 
+  clipId: 'clip-123', 
+  clipName: 'MyVideo.mp4',
+  totalClips: 3
+}
 ```
-
-**Errors to watch for:**
-- `ERROR: Video ref is null` - Video element not in DOM
-- `ERROR: Clip has no file path` - Clip data is corrupted
-- `Video error event:` - Browser failed to decode video (codec issue)
-  - Code 3 = MEDIA_ERR_DECODE (format not supported)
-  - Code 4 = MEDIA_ERR_SRC_NOT_SUPPORTED (file corrupted or wrong format)
+Shows which clip should be active at the current playhead position. If this logs excessively, there's a render loop.
 
 ---
 
-#### `[handleLoading]` - Main Loading Coordinator
+#### `[VideoPlayer:useEffect]` - Clip Loading Effect
 ```
-[handleLoading] START - hasContent: true activeClip: MyVideo.mp4 currentTime: 0
-[handleLoading] Active clip: MyVideo.mp4 activeClipState: null activeVideoIndex: 1
-[handleLoading] needsActiveLoad: true
-[handleLoading] Loading active clip to active video...
-[handleLoading] Next clip available: MyVideo2.mp4 inactiveClipState: null
-[handleLoading] Preloading next clip to inactive video...
-[handleLoading] COMPLETE - duration set to: 20.5
-```
-
-**Errors to watch for:**
-- `No timeline content` - No clips in timeline
-- `Timeline has content but no active clip at current time` - Playhead is in a gap between clips
-- `Cannot play - clip not loaded yet` - Trying to play before loading completes
-
----
-
-#### `[Playback Effect]` - Play Button Logic
-```
-[Playback Effect] Triggered: { isPlaying: true, activeClip: MyVideo.mp4, activeClipState: MyVideo.mp4, activeVideoIndex: 1, hasVideoElement: true, videoSrc: blob:..., videoReadyState: 4, currentTime: 0 }
-[Playback Effect] User wants to play
-[Playback Effect] Correct clip is loaded - starting playback
-[Playback Effect] Source time calculated: 0 video.currentTime: 0
-[Playback Effect] Calling video.play()...
-[Playback Effect] video.play() SUCCESS
-```
-
-**Errors to watch for:**
-- `No video element available` - Video element not mounted
-- `Video element has no src` - No video loaded yet
-- `Cannot play - clip not loaded yet` - activeClip and activeClipState IDs don't match
-- `video.play() ERROR:` - Browser blocked autoplay or video is corrupted
-
----
-
-#### `VideoPlayer state:` - Overall State Monitoring
-```
-VideoPlayer state: {
-  currentTime: 0,
-  clipsCount: 2,
+[VideoPlayer:useEffect] Clip loading effect triggered {
+  activeClipId: 'clip-123',
   hasContent: true,
-  activeClip: MyVideo.mp4,
-  activeClipState: MyVideo.mp4,
-  timelineDuration: 20.5,
+  timelineDuration: 15.5
+}
+```
+Triggered when clips need to be loaded/switched.
+
+---
+
+#### `[VideoPlayer:handleLoading]` - Loading Coordinator
+```
+[VideoPlayer:handleLoading] Starting {
+  hasContent: true,
+  activeClipId: 'clip-123',
+  activeClipName: 'MyVideo.mp4',
+  src: undefined
+}
+
+[VideoPlayer:handleLoading] Active video check {
+  activeVideoIndex: 1,
+  activeClipId: 'clip-123',
+  loadedClipId: null,
+  isCorrectClipLoaded: false,
+  hasSrc: false,
+  readyState: 0
+}
+
+[VideoPlayer:handleLoading] Loading active clip to active video {
+  clipId: 'clip-123',
   activeVideoIndex: 1
 }
 ```
 
+**Watch for:**
+- Repeated loading of same clip (loop indicator)
+- `readyState: 0` staying at 0 (video not loading)
+
+---
+
+#### `[VideoPlayer:loadClipToVideo]` - Individual Clip Loading
+```
+[VideoPlayer:loadClipToVideo] Starting load {
+  clipId: 'clip-123',
+  clipName: 'MyVideo.mp4',
+  hasProxy: true,
+  filePath: '/path/to/video.mp4',
+  proxyPath: '/tmp/proxy.mp4'
+}
+
+[VideoPlayer:loadClipToVideo] Generated URL { 
+  clipId: 'clip-123', 
+  videoUrl: 'asset://localhost/...'
+}
+
+[VideoPlayer:loadClipToVideo] Set video src and starting load {
+  clipId: 'clip-123',
+  readyState: 0
+}
+
+[VideoPlayer:loadClipToVideo] Metadata loaded successfully {
+  clipId: 'clip-123',
+  duration: 10.5,
+  readyState: 1
+}
+```
+
+**Errors to watch for:**
+- `Early exit` - Missing video element or file path
+- `Video load error` - File not found or can't be decoded
+
+---
+
+#### `[VideoPlayer:playback]` - Playback Control
+```
+[VideoPlayer:playback] Effect triggered {
+  hasVideo: true,
+  hasSrc: true,
+  isPlaying: true,
+  activeVideoIndex: 1,
+  activeClipId: 'clip-123',
+  activeClipStateId: 'clip-123',
+  currentTime: 0,
+  videoCurrentTime: 0,
+  readyState: 4
+}
+
+[VideoPlayer:playback] Playing {
+  clipId: 'clip-123',
+  sourceTime: 0,
+  videoCurrentTime: 0,
+  needsSeek: false
+}
+```
+
+**Watch for:**
+- `Clip mismatch - not playing` - Loading not complete
+- Excessive triggering (infinite loop)
+- `readyState` less than 4 when trying to play
+
+---
+
+#### `[VideoPlayer:seeking]` - Seeking When Paused
+```
+[VideoPlayer:seeking] Effect triggered {
+  isPlaying: false,
+  hasVideo: true,
+  activeClipId: 'clip-123',
+  activeClipStateId: 'clip-123',
+  currentTime: 5.2,
+  videoCurrentTime: 0
+}
+
+[VideoPlayer:seeking] Seeking {
+  from: 0,
+  to: 5.2,
+  clipId: 'clip-123'
+}
+```
+
+---
+
+#### `[VideoPlayer:timeupdate]` & `[VideoPlayer:ended]` - Playback Events
+```
+[VideoPlayer:timeupdate] Reached clip end {
+  clipId: 'clip-123',
+  clipEndTime: 10.5,
+  timelineTime: 10.5
+}
+
+[VideoPlayer:ended] Video ended {
+  activeClipId: 'clip-123',
+  hasActiveClip: true
+}
+
+[VideoPlayer:ended] Checking timeline end {
+  clipEndTime: 10.5,
+  timelineDuration: 15.5,
+  isEnd: false
+}
+```
+
+---
+
+#### `[VideoPlayer:blankSpace]` - Gap Playback (Animation Frame)
+```
+[VideoPlayer:blankSpace] Starting animation frame loop
+
+[VideoPlayer:blankSpace] Advancing through blank space {
+  deltaTime: 0.016,
+  newTime: 5.2,
+  timelineDuration: 15.5
+}
+
+[VideoPlayer:blankSpace] Stopping animation frame loop
+```
+**Watch for:** Excessive logging here indicates the animation frame is running constantly (normal when playing through gaps).
+
+---
+
+#### `[VideoPlayer:display]` - Display State
+```
+[VideoPlayer:display] Display state {
+  shouldShowVideo: true,
+  shouldShowBlackScreen: false,
+  activeVideoIndex: 1,
+  hasActiveClip: true,
+  hasContent: true,
+  hasSrc: false,
+  video1HasSrc: true,
+  video2HasSrc: false,
+  video1ReadyState: 4,
+  video2ReadyState: 0,
+  video1Visible: true,
+  video2Visible: false
+}
+```
+
 **What to check:**
-- `clipsCount: 0` - No clips added to timeline
-- `activeClip: undefined` - Playhead not on any clip
-- `activeClipState: undefined` - Video hasn't loaded yet
-- Mismatch between `activeClip` and `activeClipState` - Loading in progress
+- `shouldShowVideo: false` when you expect video
+- `shouldShowBlackScreen: true` means playhead is in a gap
+- Mismatch between `activeVideoIndex` and visible video
 
 ---
 
