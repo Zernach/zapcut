@@ -6,7 +6,6 @@
 
 A modern, high-performance native video editor built with Tauri and React. Edit videos with the power of a desktop app and the elegance of a web interface.
 
-[![Website](https://img.shields.io/badge/Website-zapcut.archlife.org-blue?style=for-the-badge)](https://zapcut.archlife.org)
 [![GitHub](https://img.shields.io/badge/GitHub-Zernach/zapcut-181717?style=for-the-badge&logo=github)](https://github.com/Zernach/zapcut)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -372,7 +371,6 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ## 🔗 Links
 
-- 🌐 **Website**: [zapcut.archlife.org](https://zapcut.archlife.org)
 - 💻 **GitHub**: [github.com/Zernach/zapcut](https://github.com/Zernach/zapcut)
 - 🐛 **Issues**: [github.com/Zernach/zapcut/issues](https://github.com/Zernach/zapcut/issues)
 - 📦 **Releases**: [github.com/Zernach/zapcut/releases](https://github.com/Zernach/zapcut/releases)

@@ -209,11 +209,15 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
         stopRecording,
         importToGallery,
         exportToFile,
+        getCompositedCanvas,
+        getWebcamStream,
+        getDisplayStream,
     } = useRecording();
 
     const { importFromPaths } = useMediaImport();
 
     const [settings, setSettings] = useState<RecordingSettings>({
+        screen_recording_enabled: true,
         microphone: undefined,
         microphone_enabled: false,
         webcam_enabled: false,
@@ -221,10 +225,79 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
         output_path: undefined,
     });
 
+    const [livePreviewCanvas, setLivePreviewCanvas] = useState<HTMLCanvasElement | null>(null);
+    const [livePreviewStream, setLivePreviewStream] = useState<MediaStream | null>(null);
+    const previewVideoRef = useRef<HTMLVideoElement>(null);
+
     // Load devices on component mount
     useEffect(() => {
         loadDevices();
     }, []);
+
+    // Update live preview when recording state changes
+    useEffect(() => {
+        if (recordingState.is_recording) {
+            // Priority 1: Check for composited canvas (screen + webcam)
+            const canvas = getCompositedCanvas();
+            if (canvas) {
+                setLivePreviewCanvas(canvas);
+                setLivePreviewStream(null);
+                console.log('[RecordingControls] Live preview canvas set for PiP recording');
+                return;
+            }
+
+            // Priority 2: Check for webcam stream (webcam-only or screen-only)
+            const webcamStream = getWebcamStream();
+            const displayStream = getDisplayStream();
+
+            // Use webcam if available and no screen, or use screen if available
+            if (webcamStream && !displayStream) {
+                setLivePreviewStream(webcamStream);
+                setLivePreviewCanvas(null);
+                console.log('[RecordingControls] Live preview set for webcam-only recording');
+            } else if (displayStream) {
+                setLivePreviewStream(displayStream);
+                setLivePreviewCanvas(null);
+                console.log('[RecordingControls] Live preview set for screen recording');
+            } else {
+                setLivePreviewCanvas(null);
+                setLivePreviewStream(null);
+            }
+        } else {
+            // Clear live preview when recording stops
+            setLivePreviewCanvas(null);
+            setLivePreviewStream(null);
+        }
+    }, [recordingState.is_recording, getCompositedCanvas, getWebcamStream, getDisplayStream]);
+
+    // Render canvas or stream to video element for preview
+    useEffect(() => {
+        if (!previewVideoRef.current) return;
+
+        // Handle canvas preview (composited PiP)
+        if (livePreviewCanvas) {
+            const stream = livePreviewCanvas.captureStream(30);
+            previewVideoRef.current.srcObject = stream;
+            previewVideoRef.current.play().catch(err =>
+                console.error('Error playing canvas preview:', err)
+            );
+            console.log('[RecordingControls] Canvas preview video stream started');
+        }
+        // Handle direct stream preview (webcam-only or screen-only)
+        else if (livePreviewStream) {
+            previewVideoRef.current.srcObject = livePreviewStream;
+            previewVideoRef.current.play().catch(err =>
+                console.error('Error playing stream preview:', err)
+            );
+            console.log('[RecordingControls] Direct stream preview started');
+        }
+
+        return () => {
+            if (previewVideoRef.current) {
+                previewVideoRef.current.srcObject = null;
+            }
+        };
+    }, [livePreviewCanvas, livePreviewStream]);
 
     const loadDevices = async () => {
         await Promise.all([
@@ -310,14 +383,17 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                 <div className="flex items-center gap-3 mb-2">
                     <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
                         <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                         </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-blue-400">Browser-Based Screen Recording</h3>
+                    <h3 className="text-lg font-semibold text-blue-400">Full Screen Recording</h3>
                 </div>
-                <p className="text-sm text-gray-300">
-                    When you start recording, your browser will prompt you to select which screen, window, or tab to share.
-                    No system permissions required!
+                <p className="text-sm text-gray-300 mb-2">
+                    When you start recording, your browser will show a permission dialog.
+                    <strong className="text-blue-300"> Please select "Entire Screen"</strong> to record your full display.
+                </p>
+                <p className="text-xs text-gray-400">
+                    Browser security requires this one-time selection for your privacy protection.
                 </p>
             </div>
 
@@ -338,7 +414,11 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                     {!recordingState.is_recording ? (
                         <button
                             onClick={handleStartRecording}
-                            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                            disabled={!settings.screen_recording_enabled && !settings.microphone_enabled && !settings.webcam_enabled}
+                            className={`px-4 py-2 text-white rounded transition-colors ${!settings.screen_recording_enabled && !settings.microphone_enabled && !settings.webcam_enabled
+                                ? 'bg-gray-500 cursor-not-allowed opacity-50'
+                                : 'bg-red-600 hover:bg-red-700'
+                                }`}
                         >
                             Start Recording
                         </button>
@@ -378,6 +458,26 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                     <h3 className="text-lg font-semibold mb-4 text-gray-100">Recording Settings</h3>
 
                     <div className="grid grid-cols-1 gap-4">
+                        {/* Screen Recording Settings */}
+                        <div>
+                            <label className="block text-sm font-medium mb-2 text-gray-100">Screen Recording</label>
+                            <div className="space-y-2">
+                                <label className="flex items-center text-gray-100">
+                                    <input
+                                        type="checkbox"
+                                        checked={settings.screen_recording_enabled}
+                                        onChange={(e) => setSettings((prev: RecordingSettings) => ({
+                                            ...prev,
+                                            screen_recording_enabled: e.target.checked
+                                        }))}
+                                        disabled={recordingState.is_recording}
+                                        className="mr-2"
+                                    />
+                                    Enable Screen Recording
+                                </label>
+                            </div>
+                        </div>
+
                         {/* Microphone Settings */}
                         <div>
                             <label className="block text-sm font-medium mb-2 text-gray-100">Microphone</label>
@@ -457,7 +557,7 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                         {/* Info Text */}
                         <div className="mt-2 p-3 bg-gray-700/50 rounded text-xs text-gray-400">
                             <p className="mb-1">
-                                <strong>Note:</strong> Webcam picture-in-picture is not yet fully implemented.
+                                <strong>Picture-in-Picture:</strong> When both screen and webcam are enabled, webcam appears in the lower-left corner of the recording.
                             </p>
                             <p>
                                 The browser will ask for permissions when you start recording.
@@ -474,6 +574,34 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                             <VideoPreview
                                 filePath={recordingState.output_file}
                             />
+                        </div>
+                    ) : recordingState.is_recording && (livePreviewCanvas || livePreviewStream) ? (
+                        <div className="flex flex-col h-full">
+                            <h3 className="text-lg font-semibold mb-4 text-gray-100">
+                                {livePreviewCanvas ? 'Live Preview (Picture-in-Picture)' : 'Live Preview'}
+                            </h3>
+                            <div className="flex-1 flex items-center justify-center bg-gray-900 rounded-lg border border-gray-700">
+                                <video
+                                    ref={previewVideoRef}
+                                    className="max-w-full max-h-full object-contain"
+                                    muted
+                                    autoPlay
+                                    playsInline
+                                />
+                            </div>
+                            <div className="mt-2 text-xs text-gray-400 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+                                    <span>
+                                        {livePreviewCanvas
+                                            ? 'Recording with webcam overlay in lower-left'
+                                            : livePreviewStream && getWebcamStream() && !getDisplayStream()
+                                                ? 'Recording webcam'
+                                                : 'Recording in progress'
+                                        }
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     ) : (
                         <div className="flex flex-col h-full items-center justify-center">

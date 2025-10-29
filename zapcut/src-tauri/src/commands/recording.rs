@@ -86,6 +86,11 @@ pub async fn process_recording(
     let webm_path = recordings_dir.join(&webm_filename);
     let mp4_path = recordings_dir.join(&mp4_filename);
     
+    // Validate data is not empty
+    if data.is_empty() {
+        return Err("Received empty recording data".to_string());
+    }
+    
     // Write WebM data to temporary file
     fs::write(&webm_path, &data)
         .await
@@ -93,13 +98,61 @@ pub async fn process_recording(
     
     eprintln!("[Recording] WebM file written to: {:?}", webm_path);
     
+    // Verify the WebM file was written correctly
+    let metadata = fs::metadata(&webm_path)
+        .await
+        .map_err(|e| format!("Failed to verify WebM file: {}", e))?;
+    
+    if metadata.len() == 0 {
+        return Err("WebM file is empty after writing".to_string());
+    }
+    
+    eprintln!("[Recording] WebM file size: {} bytes", metadata.len());
+    
     // Re-encode to MP4 using FFmpeg for better compression and compatibility
     let ffmpeg_path = get_ffmpeg_path().map_err(|e| format!("FFmpeg not found: {}", e))?;
     
     eprintln!("[Recording] Re-encoding to MP4...");
     
-    let output = Command::new(ffmpeg_path)
+    // First, try to validate the WebM file with FFprobe
+    let ffprobe_path = get_ffmpeg_path()
+        .ok()
+        .and_then(|p| {
+            let parent = std::path::Path::new(&p).parent()?;
+            let ffprobe = parent.join("ffprobe");
+            if ffprobe.exists() {
+                Some(ffprobe)
+            } else {
+                None
+            }
+        });
+    
+    if let Some(ffprobe) = ffprobe_path {
+        eprintln!("[Recording] Validating WebM file with ffprobe...");
+        let probe_output = Command::new(ffprobe)
+            .args(&[
+                "-v", "error",
+                "-show_format",
+                "-show_streams",
+                webm_path.to_str().unwrap(),
+            ])
+            .output()
+            .ok();
+        
+        if let Some(probe_output) = probe_output {
+            if !probe_output.status.success() {
+                let stderr = String::from_utf8_lossy(&probe_output.stderr);
+                eprintln!("[Recording] Warning: FFprobe validation failed: {}", stderr);
+                eprintln!("[Recording] The WebM file may be corrupted, but attempting to process anyway...");
+            } else {
+                eprintln!("[Recording] WebM file validation passed");
+            }
+        }
+    }
+    
+    let output = Command::new(&ffmpeg_path)
         .args(&[
+            "-err_detect", "ignore_err",  // Try to ignore minor errors
             "-i", webm_path.to_str().unwrap(),
             "-c:v", "libx264",
             "-preset", "fast",
@@ -118,14 +171,22 @@ pub async fn process_recording(
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         eprintln!("[Recording] FFmpeg error: {}", stderr);
-        return Err(format!("FFmpeg re-encoding failed: {}", stderr));
+        
+        // Keep the WebM file for debugging
+        eprintln!("[Recording] WebM file preserved for debugging at: {:?}", webm_path);
+        
+        return Err(format!(
+            "FFmpeg re-encoding failed. The WebM file may be corrupted. Error: {}", 
+            stderr
+        ));
     }
     
     eprintln!("[Recording] MP4 file created: {:?}", mp4_path);
     
-    // Delete the temporary WebM file
-    if let Err(e) = fs::remove_file(&webm_path).await {
-        eprintln!("[Recording] Warning: Failed to delete temporary WebM file: {}", e);
+    // Delete the temporary WebM file only on success
+    match fs::remove_file(&webm_path).await {
+        Ok(_) => eprintln!("[Recording] Temporary WebM file deleted"),
+        Err(e) => eprintln!("[Recording] Warning: Failed to delete temporary WebM file: {}", e),
     }
     
     // Verify output file exists and has content

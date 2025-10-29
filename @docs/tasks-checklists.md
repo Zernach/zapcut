@@ -4,12 +4,110 @@
 **Version:** 1.0  
 **Last Updated:** October 29, 2025  
 **Status:** Planning Phase  
-**Website:** https://zapcut.archlife.org  
 **Repository:** https://github.com/Zernach/zapcut
 
 ---
 
 ## Recent Updates
+
+### October 29, 2025 - Live Preview for All Recording Modes
+**Status:** ✅ Completed
+
+Added live preview support for all recording modes including webcam-only recording:
+
+**Changes Made:**
+- ✅ Added `getWebcamStream()` and `getDisplayStream()` methods to `useRecording` hook
+- ✅ Updated preview logic in `RecordingControls` to handle three preview modes:
+  1. Canvas preview for picture-in-picture (screen + webcam compositing)
+  2. Direct stream preview for webcam-only recording
+  3. Direct stream preview for screen-only recording
+- ✅ Added dynamic preview titles based on recording mode
+- ✅ Added contextual status messages ("Recording webcam", "Recording with webcam overlay", etc.)
+- ✅ Improved preview fallback logic with priority system
+
+**Preview Modes:**
+1. **Picture-in-Picture** - Shows composited canvas with webcam overlay
+2. **Webcam Only** - Shows live webcam feed
+3. **Screen Only** - Shows live screen capture
+4. **Microphone Only** - No preview (audio-only)
+
+**Technical Details:**
+- Priority system: Canvas (composited) > Webcam stream > Display stream
+- Direct MediaStream rendering for non-composited modes (more efficient)
+- Automatic cleanup on recording stop
+
+---
+
+### October 29, 2025 - Webcam Recording Bug Fix
+**Status:** ✅ Completed
+
+Fixed corrupted WebM files and "No active tracks" error when recording with webcam enabled:
+
+**Root Causes:**
+1. Canvas compositing stream wasn't fully initialized before MediaRecorder started
+2. Audio tracks weren't properly integrated into composited stream
+3. Webcam-only recording failed because webcam tracks weren't added to the recording stream
+4. FFmpeg received invalid/corrupted WebM data causing "EBML header parsing failed" errors
+
+**Changes Made:**
+- ✅ Fixed stream composition in `useRecording.ts` to properly combine canvas video with microphone audio
+- ✅ Added webcam tracks to combined stream when webcam-only recording (no screen capture)
+- ✅ Added 500ms initialization delay for canvas compositing before starting MediaRecorder
+- ✅ Added stream validation to verify active tracks before recording with helpful error messages
+- ✅ Improved FFmpeg error handling in `recording.rs` with better validation
+- ✅ Added FFprobe validation step to detect corrupted WebM files early
+- ✅ Preserved WebM files on failure for debugging
+- ✅ Added `-err_detect ignore_err` flag to FFmpeg for better error recovery
+- ✅ Added detailed logging for track counts, settings, and compositing status
+
+**Technical Details:**
+- Canvas compositing creates a `MediaStream` from `canvas.captureStream(30)` but needs time to render initial frames
+- MediaRecorder starting immediately can capture incomplete/corrupted data
+- Webcam tracks must be added to `combinedStream` when screen recording is disabled
+- Added explicit track validation and logging for better debugging
+
+**Recording Modes Supported:**
+1. **Screen only** - Screen recording without webcam or microphone
+2. **Screen + Microphone** - Screen recording with audio narration
+3. **Screen + Webcam** - Picture-in-picture with webcam overlay (composited)
+4. **Screen + Webcam + Microphone** - Full composited recording with audio
+5. **Webcam only** - Direct webcam recording without screen capture
+6. **Webcam + Microphone** - Webcam recording with audio
+7. **Microphone only** - Audio-only recording
+
+**Testing Recommendations:**
+1. Test webcam-only recording (now works correctly)
+2. Test screen + webcam (picture-in-picture) recording
+3. Test screen + webcam + microphone recording
+4. Test microphone-only recording
+5. Verify WebM files are valid before FFmpeg processing
+6. Check console logs for track counts and compositing status
+
+---
+
+### October 29, 2025 - Screen Recording Auto-Capture Configuration
+**Status:** ✅ Completed
+
+Optimized screen recording to automatically prefer full-screen capture instead of prompting for window/tab selection:
+
+**Changes Made:**
+- ✅ Updated `getDisplayMedia()` constraints to use `displaySurface: 'monitor'` (prefers entire screen)
+- ✅ Added browser hints: `preferCurrentTab: false`, `surfaceSwitching: 'exclude'`, `selfBrowserSurface: 'exclude'`
+- ✅ Increased max resolution support to 4K (3840x2160) from 1920x1080
+- ✅ Updated UI messaging to guide users to select "Entire Screen" in browser dialog
+- ✅ Improved SVG icon to represent full screen recording
+
+**Technical Details:**
+- While browser security requires user interaction, the `displaySurface: 'monitor'` constraint hints to the browser that we want full screen recording
+- Modern browsers will pre-select or highlight the screen option based on these constraints
+- This provides the best UX while maintaining browser security standards
+
+**Browser Compatibility:**
+- Chrome/Edge: Fully supports all constraints
+- Firefox: Supports basic displaySurface, may ignore advanced hints
+- Safari: Limited support, may show all options equally
+
+---
 
 ### October 29, 2025 - Screen Recording Migration to Browser APIs
 **Status:** ✅ Completed
@@ -53,7 +151,7 @@ Migrated screen recording from FFmpeg/AVFoundation to browser-based capture usin
 
 4. **Webcam (Partial Implementation)**
    - Enable "Enable Webcam" checkbox
-   - Note: Full PiP composition not yet implemented
+   - Note: See Picture-in-Picture section below for full PiP implementation
    - Should request webcam permission
 
 5. **Import to Gallery**
@@ -62,9 +160,81 @@ Migrated screen recording from FFmpeg/AVFoundation to browser-based capture usin
    - Check success message appears
 
 **Known Limitations:**
-- Webcam picture-in-picture composition not fully implemented (future enhancement)
 - Pause/resume functionality removed (simplified to start/stop only)
 - Screen selection handled by browser (no dropdown needed)
+
+---
+
+### October 29, 2025 - Picture-in-Picture Recording Implementation
+**Status:** ✅ Completed
+
+Implemented real-time picture-in-picture compositing for screen + webcam recordings using HTML5 Canvas API:
+
+**Changes Made:**
+- ✅ Created `videoCompositing.ts` utility with canvas-based stream compositing
+- ✅ Updated `useRecording.ts` to automatically composite when both screen and webcam are enabled
+- ✅ Added live preview of composited stream in `RecordingControls.tsx`
+- ✅ Updated UI messaging to reflect implemented PiP functionality
+- ✅ Added cleanup logic for compositing resources
+
+**Implementation Details:**
+- **Webcam Overlay Size:** 20% of screen width
+- **Position:** Lower-left corner with 16px padding from edges
+- **Visual Style:** 2px white border with drop shadow for visibility
+- **Frame Rate:** 30fps matching screen recording
+- **Aspect Ratio:** Maintained automatically (typically 16:9)
+
+**Technical Architecture:**
+1. **Canvas Compositing (`videoCompositing.ts`):**
+   - Creates offscreen canvas matching screen dimensions
+   - Uses `requestAnimationFrame` for smooth 30fps rendering
+   - Draws screen video as background layer
+   - Overlays webcam video in lower-left corner
+   - Applies border and shadow effects
+   - Returns `canvas.captureStream()` for MediaRecorder
+
+2. **Recording Hook Integration (`useRecording.ts`):**
+   - Checks if both screen and webcam streams are available using `canComposite()`
+   - Automatically creates composited stream when both enabled
+   - Falls back to screen-only if compositing fails
+   - Properly cleans up compositing resources on stop
+
+3. **Live Preview (`RecordingControls.tsx`):**
+   - Detects composited canvas during recording
+   - Renders live preview video element from canvas stream
+   - Shows "Live Preview (PiP)" heading with recording indicator
+   - Displays helpful text: "Recording with webcam overlay in lower-left"
+
+**User Experience:**
+- When only screen recording: Works as before (no changes)
+- When screen + webcam enabled: Automatic PiP compositing with live preview
+- Browser permission prompts handled sequentially (screen first, then webcam)
+- Preview shows exactly what will be recorded
+
+**Testing Required:**
+1. **Screen-Only Recording**
+   - Disable webcam, enable screen
+   - Verify recording works as before
+   - No PiP overlay should appear
+
+2. **Screen + Webcam PiP Recording**
+   - Enable both screen and webcam checkboxes
+   - Select desired webcam from dropdown
+   - Click "Start Recording"
+   - Grant screen and webcam permissions
+   - Verify live preview shows webcam in lower-left corner
+   - Stop recording and play back result
+   - Verify webcam overlay is present in recording
+
+3. **Webcam-Only Recording**
+   - Enable webcam, disable screen
+   - Verify recording captures only webcam
+   - No compositing should occur
+
+**Known Features:**
+- PiP size, position, and styling are currently fixed (20% width, lower-left)
+- Future enhancement could add user controls for size/position
+- Canvas compositing is hardware-accelerated (minimal performance impact)
 
 ---
 
@@ -543,7 +713,6 @@ Migrated screen recording from FFmpeg/AVFoundation to browser-based capture usin
   
   A high-performance, native desktop video editor built with Tauri and React.
   
-  **Website:** https://zapcut.archlife.org  
   **Repository:** https://github.com/Zernach/zapcut
   
   ## Prerequisites
@@ -567,7 +736,6 @@ Migrated screen recording from FFmpeg/AVFoundation to browser-based capture usin
   - `/@docs` - Documentation
   
   ## Links
-  - Website: https://zapcut.archlife.org
   - GitHub: https://github.com/Zernach/zapcut
   - Documentation: See `/@docs` directory
   
@@ -3004,7 +3172,6 @@ Due to length constraints, I'll provide a high-level overview of remaining phase
 
 ## Project Resources
 
-- **Website**: https://zapcut.archlife.org
 - **GitHub Repository**: https://github.com/Zernach/zapcut
 - **Documentation**: `/@docs` directory
 - **Issue Tracker**: https://github.com/Zernach/zapcut/issues

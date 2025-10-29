@@ -5,7 +5,6 @@
 **Last Updated:** October 28, 2025  
 **Project Type:** Desktop Application (Cross-Platform)  
 **Status:** Planning Phase  
-**Website:** https://zapcut.archlife.org  
 **Repository:** https://github.com/Zernach/zapcut
 
 ---
@@ -31,7 +30,6 @@
 **ZapCut** is a high-performance, native desktop video editor designed for creators who need speed and simplicity. Built on Tauri (Rust backend) and React (frontend), ZapCut provides essential video editing capabilities: screen recording, webcam capture, clip arrangement, timeline editing, and professional video export.
 
 **Project Links:**
-- Website: https://zapcut.archlife.org
 - GitHub: https://github.com/Zernach/zapcut
 
 ### Key Differentiators
@@ -3860,7 +3858,6 @@ tokio = { version = "1.35", features = ["full"] }
 ### Reference Materials
 
 **Project Resources:**
-- **ZapCut Website**: https://zapcut.archlife.org
 - **ZapCut GitHub**: https://github.com/Zernach/zapcut
 
 **Technical Documentation:**

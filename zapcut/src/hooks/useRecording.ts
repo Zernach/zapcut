@@ -1,7 +1,9 @@
 import { useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { createCompositedStream, canComposite, CompositingResult } from '../utils/videoCompositing';
 
 export interface RecordingSettings {
+    screen_recording_enabled: boolean;
     microphone?: string;
     microphone_enabled: boolean;
     webcam_enabled: boolean;
@@ -19,6 +21,7 @@ export const useRecording = () => {
     const [recordingState, setRecordingState] = useState<RecordingState>({
         is_recording: false,
         current_settings: {
+            screen_recording_enabled: true,
             microphone: undefined,
             microphone_enabled: false,
             webcam_enabled: false,
@@ -37,6 +40,7 @@ export const useRecording = () => {
     const audioStreamRef = useRef<MediaStream | null>(null);
     const webcamStreamRef = useRef<MediaStream | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
+    const compositingRef = useRef<CompositingResult | null>(null);
 
     // Get available microphones using browser API
     const getMicrophones = useCallback(async () => {
@@ -72,26 +76,46 @@ export const useRecording = () => {
             // Reset recorded chunks
             recordedChunksRef.current = [];
 
-            // Get display media (screen capture)
-            const displayStream = await navigator.mediaDevices.getDisplayMedia({
-                video: {
-                    // @ts-expect-error - mediaSource is valid but not in all type definitions
-                    mediaSource: 'screen',
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 },
-                    frameRate: { ideal: 30 },
-                },
-                audio: false, // We'll handle audio separately for better control
-            });
-
-            displayStreamRef.current = displayStream;
-            console.log('[Recording] Display stream acquired');
-
-            // Create a combined stream starting with video from display
+            // Create a combined stream
             const combinedStream = new MediaStream();
-            displayStream.getVideoTracks().forEach(track => {
-                combinedStream.addTrack(track);
-            });
+
+            // Get display media (screen capture) if enabled
+            if (settings.screen_recording_enabled) {
+                // Note: Browser security requires user interaction and will show a picker dialog
+                // We configure it to prefer full screen recording
+                const displayConstraints: DisplayMediaStreamOptions = {
+                    video: {
+                        displaySurface: 'monitor', // Request full screen/monitor instead of window or tab
+                        width: { ideal: 1920, max: 3840 },
+                        height: { ideal: 1080, max: 2160 },
+                        frameRate: { ideal: 30, max: 60 },
+                    } as MediaTrackConstraints,
+                    audio: false, // We'll handle audio separately for better control
+                };
+
+                // Add additional hints for browser (not all browsers support these)
+                Object.assign(displayConstraints, {
+                    preferCurrentTab: false, // Don't prefer current tab, prefer screen
+                    surfaceSwitching: 'exclude', // Don't allow switching during recording
+                    selfBrowserSurface: 'exclude', // Don't show ZapCut in the selection
+                });
+
+                const displayStream = await navigator.mediaDevices.getDisplayMedia(displayConstraints);
+
+                displayStreamRef.current = displayStream;
+                console.log('[Recording] Display stream acquired');
+
+                // Add video tracks from display to combined stream
+                displayStream.getVideoTracks().forEach(track => {
+                    combinedStream.addTrack(track);
+                });
+
+                // Handle stream ended (user stopped sharing via browser UI)
+                displayStream.getVideoTracks()[0].onended = () => {
+                    console.log('[Recording] Display track ended (user stopped sharing)');
+                    stopRecording();
+                };
+            }
 
             // Get microphone audio if enabled
             if (settings.microphone_enabled) {
@@ -113,7 +137,7 @@ export const useRecording = () => {
                 }
             }
 
-            // Get webcam if enabled (for picture-in-picture)
+            // Get webcam if enabled (for picture-in-picture or standalone)
             if (settings.webcam_enabled) {
                 try {
                     const webcamConstraints: MediaStreamConstraints = {
@@ -123,13 +147,62 @@ export const useRecording = () => {
                     };
                     const webcamStream = await navigator.mediaDevices.getUserMedia(webcamConstraints);
                     webcamStreamRef.current = webcamStream;
-                    // Note: For picture-in-picture, you'd need to composite the webcam
-                    // onto the screen capture using Canvas. This is a simplified version.
                     console.log('[Recording] Webcam stream acquired');
+
+                    // If screen recording is NOT enabled, add webcam directly to combined stream
+                    if (!settings.screen_recording_enabled) {
+                        webcamStream.getVideoTracks().forEach(track => {
+                            combinedStream.addTrack(track);
+                        });
+                        console.log('[Recording] Webcam tracks added to combined stream (webcam-only mode)');
+                    }
                 } catch (webcamError) {
                     console.error('[Recording] Failed to get webcam:', webcamError);
                     alert('Failed to access webcam. Recording will continue without camera.');
                 }
+            }
+
+            // Check if we need to composite screen + webcam
+            let streamToRecord = combinedStream;
+            if (canComposite(displayStreamRef.current, webcamStreamRef.current)) {
+                console.log('[Recording] Creating composited stream with picture-in-picture');
+                try {
+                    const compositing = createCompositedStream({
+                        screenStream: displayStreamRef.current!,
+                        webcamStream: webcamStreamRef.current!,
+                    });
+                    compositingRef.current = compositing;
+
+                    // Create a new MediaStream with video from canvas and audio from mic
+                    const compositedVideoStream = new MediaStream();
+
+                    // Add video track from composited canvas
+                    compositing.compositedStream.getVideoTracks().forEach(track => {
+                        compositedVideoStream.addTrack(track);
+                    });
+
+                    // Add audio track from microphone (if enabled)
+                    if (audioStreamRef.current) {
+                        audioStreamRef.current.getAudioTracks().forEach(track => {
+                            compositedVideoStream.addTrack(track);
+                        });
+                    }
+
+                    streamToRecord = compositedVideoStream;
+
+                    console.log('[Recording] Composited stream created successfully with',
+                        compositedVideoStream.getVideoTracks().length, 'video tracks and',
+                        compositedVideoStream.getAudioTracks().length, 'audio tracks');
+                } catch (compositingError) {
+                    console.error('[Recording] Failed to create composited stream:', compositingError);
+                    alert('Failed to create picture-in-picture. Recording will continue with screen only.');
+                }
+            }
+
+            // If compositing, wait a moment for the canvas to start rendering frames
+            if (compositingRef.current) {
+                console.log('[Recording] Waiting for canvas compositing to initialize...');
+                await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms
             }
 
             // Determine best codec
@@ -142,8 +215,26 @@ export const useRecording = () => {
             }
             console.log('[Recording] Using MIME type:', mimeType);
 
-            // Create MediaRecorder
-            const mediaRecorder = new MediaRecorder(combinedStream, {
+            // Verify stream has active tracks before recording
+            const videoTracks = streamToRecord.getVideoTracks();
+            const audioTracks = streamToRecord.getAudioTracks();
+            console.log('[Recording] Stream has', videoTracks.length, 'video tracks and', audioTracks.length, 'audio tracks');
+            console.log('[Recording] Settings:', {
+                screen: settings.screen_recording_enabled,
+                webcam: settings.webcam_enabled,
+                microphone: settings.microphone_enabled,
+                compositing: !!compositingRef.current
+            });
+
+            if (videoTracks.length === 0 && audioTracks.length === 0) {
+                throw new Error(
+                    'No active tracks in stream to record. Make sure to grant permissions when prompted. ' +
+                    `Settings: Screen=${settings.screen_recording_enabled}, Webcam=${settings.webcam_enabled}, Mic=${settings.microphone_enabled}`
+                );
+            }
+
+            // Create MediaRecorder with the appropriate stream
+            const mediaRecorder = new MediaRecorder(streamToRecord, {
                 mimeType,
                 videoBitsPerSecond: 2500000, // 2.5 Mbps
             });
@@ -217,12 +308,6 @@ export const useRecording = () => {
                 settings,
             });
 
-            // Handle stream ended (user stopped sharing via browser UI)
-            displayStream.getVideoTracks()[0].onended = () => {
-                console.log('[Recording] Display track ended (user stopped sharing)');
-                stopRecording();
-            };
-
             return 'Recording started';
         } catch (error) {
             console.error('Failed to start recording:', error);
@@ -233,6 +318,12 @@ export const useRecording = () => {
 
     // Helper function to stop all streams
     const stopAllStreams = useCallback(() => {
+        // Clean up compositing resources first
+        if (compositingRef.current) {
+            compositingRef.current.cleanup();
+            compositingRef.current = null;
+        }
+
         if (displayStreamRef.current) {
             displayStreamRef.current.getTracks().forEach(track => track.stop());
             displayStreamRef.current = null;
@@ -323,6 +414,21 @@ export const useRecording = () => {
         }
     }, []);
 
+    // Get the composited canvas for live preview
+    const getCompositedCanvas = useCallback(() => {
+        return compositingRef.current?.canvas || null;
+    }, []);
+
+    // Get the active webcam stream for live preview
+    const getWebcamStream = useCallback(() => {
+        return webcamStreamRef.current;
+    }, []);
+
+    // Get the active display stream for live preview
+    const getDisplayStream = useCallback(() => {
+        return displayStreamRef.current;
+    }, []);
+
     return {
         recordingState,
         availableMicrophones,
@@ -335,5 +441,8 @@ export const useRecording = () => {
         importToGallery,
         exportToFile,
         generateRecordingThumbnail,
+        getCompositedCanvas,
+        getWebcamStream,
+        getDisplayStream,
     };
 };
