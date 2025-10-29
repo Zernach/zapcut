@@ -127,15 +127,21 @@ jobs:
             
             # Import certificate to keychain
             echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
-            security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
             
             # Allow codesign to access the certificate without prompting
             security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+            
+            # Add to search list
+            security list-keychains -d user -s build.keychain login.keychain
             
             # Cleanup
             rm certificate.p12
             
             echo "✅ Certificate imported successfully"
+            
+            # List available identities for debugging
+            security find-identity -v -p codesigning
           else
             echo "ℹ️  No certificate provided, will use ad-hoc signing"
           fi
@@ -239,6 +245,9 @@ jobs:
 
       - name: Build Tauri app
         working-directory: zapcut
+        env:
+          # Tell Tauri to skip signing - we'll sign manually afterwards
+          APPLE_SIGNING_IDENTITY: "-"
         run: npm run tauri build -- --target ${{ matrix.target }}
 
       - name: Sign macOS App
@@ -259,10 +268,15 @@ jobs:
             
             echo "Using entitlements file: $ENTITLEMENTS_PATH"
             
+            # Remove any existing signatures from the app bundle
+            echo "Removing existing signatures..."
+            codesign --remove-signature ZapCut.app/Contents/MacOS/zapcut 2>/dev/null || true
+            
             # First, sign all executable binaries inside the app bundle (like FFmpeg)
             echo "Signing embedded binaries..."
             find ZapCut.app/Contents/MacOS -type f -perm +111 -not -path "*/ZapCut.app/Contents/MacOS/zapcut" | while read binary; do
               echo "  Signing: $binary"
+              codesign --remove-signature "$binary" 2>/dev/null || true
               codesign --force --options runtime \
                 --sign "$APPLE_SIGNING_IDENTITY" \
                 --timestamp \
@@ -273,6 +287,7 @@ jobs:
             echo "Signing dynamic libraries..."
             find ZapCut.app/Contents -name "*.dylib" -type f | while read dylib; do
               echo "  Signing: $dylib"
+              codesign --remove-signature "$dylib" 2>/dev/null || true
               codesign --force --options runtime \
                 --sign "$APPLE_SIGNING_IDENTITY" \
                 --timestamp \
