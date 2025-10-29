@@ -1,5 +1,6 @@
 import { Group, Rect, Line, Text } from 'react-konva';
 import { COLORS } from '../../constants/colors';
+import { useTimelineStore } from '../../store/timelineStore';
 
 interface TimeRulerProps {
     width: number;
@@ -8,6 +9,7 @@ interface TimeRulerProps {
 }
 
 export function TimeRuler({ width, height, zoom }: TimeRulerProps) {
+    const clearSelection = useTimelineStore((state) => state.clearSelection);
     const interval = zoom < 10 ? 5 : zoom < 20 ? 2 : 1; // Major tick every N seconds
     const majorTicks: number[] = [];
     const minorTicks: number[] = [];
@@ -21,10 +23,22 @@ export function TimeRuler({ width, height, zoom }: TimeRulerProps) {
         }
     }
 
+    const handleRulerClick = () => {
+        // Clear selection when clicking on ruler
+        clearSelection();
+    };
+
     return (
         <Group>
             {/* Background */}
-            <Rect x={0} y={0} width={width} height={height} fill={COLORS.timelineRulerFill} />
+            <Rect
+                x={0}
+                y={0}
+                width={width}
+                height={height}
+                fill={COLORS.timelineRulerFill}
+                onClick={handleRulerClick}
+            />
 
             {/* Major ticks and labels */}
             {majorTicks.map((time) => {

@@ -64,6 +64,7 @@ export function TimelineClip({ clip, zoom, trackHeight }: TimelineClipProps) {
 
     const handleClick = (e: KonvaEventObject<MouseEvent>) => {
         if (isDraggingTrim) return;
+        e.cancelBubble = true; // Prevent click from bubbling to track background
         selectClip(clip.id, e.evt.shiftKey);
     };
 

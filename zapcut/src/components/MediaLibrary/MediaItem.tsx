@@ -38,7 +38,8 @@ export function MediaItem({ item }: MediaItemProps) {
         loadThumbnail();
     }, [item.thumbnailPath]);
 
-    const handleClick = () => {
+    const handleClick = (e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent bubbling to MediaLibrary
         selectItem(item.id);
     };
 

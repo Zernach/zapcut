@@ -260,8 +260,14 @@ export function VideoPlayer({ src, autoPlay = false }: VideoPlayerProps) {
     const shouldShowVideo = activeClip || (!hasContent && src);
     const displayMessage = hasContent && !activeClip ? 'No content at current time' : 'No video selected';
 
+    // Clear timeline clip selection when clicking on video player
+    const clearSelection = useTimelineStore((state) => state.clearSelection);
+    const handleClick = () => {
+        clearSelection();
+    };
+
     return (
-        <div className="relative w-full h-full bg-black flex items-center justify-center">
+        <div className="relative w-full h-full bg-black flex items-center justify-center" onClick={handleClick}>
             {shouldShowVideo ? (
                 <video ref={videoRef} className="max-w-full max-h-full" autoPlay={autoPlay} />
             ) : (

@@ -16,11 +16,24 @@ export function Track({ track, y, width, height, zoom }: TrackProps) {
     const clips = useTimelineStore((state) =>
         state.clips.filter((clip) => track.clips.includes(clip.id))
     );
+    const clearSelection = useTimelineStore((state) => state.clearSelection);
+
+    const handleTrackClick = () => {
+        // Clear selection when clicking on empty track area
+        clearSelection();
+    };
 
     return (
         <Group y={y}>
             {/* Track background */}
-            <Rect x={0} y={0} width={width} height={height} fill={COLORS.trackBackground} />
+            <Rect
+                x={0}
+                y={0}
+                width={width}
+                height={height}
+                fill={COLORS.trackBackground}
+                onClick={handleTrackClick}
+            />
 
             {/* Track label */}
             <Text

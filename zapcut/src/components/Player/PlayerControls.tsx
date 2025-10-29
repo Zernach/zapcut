@@ -1,5 +1,6 @@
 import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
+import { useTimelineStore } from '../../store/timelineStore';
 import { formatDuration } from '../../utils/formatUtils';
 
 export function PlayerControls() {
@@ -15,6 +16,8 @@ export function PlayerControls() {
         toggleMute,
     } = usePlayerStore();
 
+    const clearSelection = useTimelineStore((state) => state.clearSelection);
+
     const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
         setCurrentTime(parseFloat(e.target.value));
     };
@@ -23,8 +26,13 @@ export function PlayerControls() {
         setVolume(parseFloat(e.target.value));
     };
 
+    const handleClick = () => {
+        // Clear timeline clip selection when clicking on player controls
+        clearSelection();
+    };
+
     return (
-        <div className="bg-panel border-t border-border p-3">
+        <div className="bg-panel border-t border-border p-3" onClick={handleClick}>
             {/* Seek bar */}
             <input
                 type="range"

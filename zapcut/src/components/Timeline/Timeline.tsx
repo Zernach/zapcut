@@ -14,7 +14,7 @@ export function Timeline() {
     const containerRef = useRef<HTMLDivElement>(null);
     const [stageWidth, setStageWidth] = useState(1000);
 
-    const { tracks, zoom, currentTime, setZoom, selectedClipIds, removeClip } = useTimelineStore();
+    const { tracks, zoom, currentTime, setZoom, selectedClipIds, removeClip, clearSelection } = useTimelineStore();
 
     // Resize stage to fit container
     useEffect(() => {
@@ -61,6 +61,13 @@ export function Timeline() {
         setZoom(Math.max(zoom / 1.2, 5));
     };
 
+    const handleStageClick = (e: any) => {
+        // Only clear selection if clicking on the stage itself (not on any shape)
+        if (e.target === e.target.getStage()) {
+            clearSelection();
+        }
+    };
+
     return (
         <div className="h-full flex flex-col bg-gray-900">
             {/* Toolbar */}
@@ -86,7 +93,7 @@ export function Timeline() {
 
             {/* Timeline canvas */}
             <div ref={containerRef} className="flex-1 overflow-auto">
-                <Stage width={stageWidth} height={totalHeight}>
+                <Stage width={stageWidth} height={totalHeight} onClick={handleStageClick}>
                     <Layer>
                         {/* Time ruler */}
                         <TimeRuler width={stageWidth} height={RULER_HEIGHT} zoom={zoom} />

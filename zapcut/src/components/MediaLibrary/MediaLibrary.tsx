@@ -1,6 +1,8 @@
 import { useMediaStore } from '../../store/mediaStore';
+import { useTimelineStore } from '../../store/timelineStore';
 import { MediaItem as MediaItemComponent } from './MediaItem';
 import { DropZone } from './DropZone';
+import { SelectedClipToolbox } from './SelectedClipToolbox';
 import { useMediaImport } from '../../hooks/useMediaImport';
 import { Upload, FileVideo } from 'lucide-react';
 
@@ -10,16 +12,32 @@ interface MediaLibraryProps {
 
 export function MediaLibrary({ onExportClick }: MediaLibraryProps) {
     const items = useMediaStore((state) => state.items);
+    const clearSelection = useTimelineStore((state) => state.clearSelection);
     const { importFromFilePicker, isImporting } = useMediaImport();
 
+    const handleClick = () => {
+        // Clear timeline clip selection when clicking in media library
+        clearSelection();
+    };
+
+    const handleImportClick = (e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent deselection
+        importFromFilePicker();
+    };
+
+    const handleExportClick = (e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent deselection
+        if (onExportClick) onExportClick();
+    };
+
     return (
-        <div className="h-full flex flex-col bg-panel">
+        <div className="h-full flex flex-col bg-panel" onClick={handleClick}>
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-border">
                 <h2 className="text-lg font-semibold">Media</h2>
                 <div className="flex items-center gap-2">
                     <button
-                        onClick={importFromFilePicker}
+                        onClick={handleImportClick}
                         disabled={isImporting}
                         className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed rounded text-sm flex items-center gap-2 transition-colors"
                     >
@@ -28,7 +46,7 @@ export function MediaLibrary({ onExportClick }: MediaLibraryProps) {
                     </button>
                     {onExportClick && (
                         <button
-                            onClick={onExportClick}
+                            onClick={handleExportClick}
                             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm flex items-center gap-2 transition-colors"
                         >
                             <FileVideo size={16} />
@@ -58,6 +76,9 @@ export function MediaLibrary({ onExportClick }: MediaLibraryProps) {
                     )}
                 </div>
             </DropZone>
+
+            {/* Selected Clip Toolbox */}
+            <SelectedClipToolbox />
         </div>
     );
 }
