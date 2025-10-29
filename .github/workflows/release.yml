@@ -12,8 +12,8 @@ jobs:
     permissions:
       contents: write
     outputs:
-      release_id: ${{ steps.create-release.outputs.result }}
-      release_upload_url: ${{ steps.create-release.outputs.upload_url }}
+      release_id: ${{ fromJson(steps.create-release.outputs.result).id }}
+      release_upload_url: ${{ fromJson(steps.create-release.outputs.result).upload_url }}
     
     steps:
       - name: Checkout code
@@ -47,7 +47,10 @@ jobs:
               draft: true,
               prerelease: false
             })
-            return data.id
+            return {
+              id: data.id,
+              upload_url: data.upload_url
+            }
 
   build-tauri:
     needs: create-release
