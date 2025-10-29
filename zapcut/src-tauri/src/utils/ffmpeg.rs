@@ -82,36 +82,44 @@ fn get_sidecar_path(binary_name: &str) -> Result<PathBuf> {
     };
     
     // Try multiple locations for the binary
-    let paths_to_try = vec![
+    let mut paths_to_try = vec![
         // Location 1: Same directory as executable (Linux, Windows in most cases)
         exe_dir.join(&binary_name_with_ext),
-        // Location 2: Parent directory (macOS bundle root)
-        exe_dir.parent()
-            .and_then(|p| p.parent())
-            .map(|p| p.join(&binary_name_with_ext)),
-        // Location 3: Resources directory in app bundle
-        exe_dir.parent()
-            .and_then(|p| p.parent())
-            .map(|p| p.join("Resources").join(&binary_name_with_ext)),
-        // Location 4: Check if it's in a binaries subdirectory (for development)
-        exe_dir.join("binaries")
-            .join(if cfg!(target_os = "macos") {
-                if cfg!(target_arch = "aarch64") {
-                    "macos-aarch64"
-                } else {
-                    "macos-x86_64"
-                }
-            } else if cfg!(target_os = "linux") {
-                "linux-x86_64"
-            } else if cfg!(target_os = "windows") {
-                "windows-x86_64"
-            } else {
-                "unknown"
-            })
-            .join(&binary_name_with_ext),
     ];
     
-    for path in paths_to_try.iter().flatten() {
+    // Location 2: Parent directory (macOS bundle root)
+    if let Some(parent) = exe_dir.parent() {
+        if let Some(grandparent) = parent.parent() {
+            paths_to_try.push(grandparent.join(&binary_name_with_ext));
+        }
+    }
+    
+    // Location 3: Resources directory in app bundle
+    if let Some(parent) = exe_dir.parent() {
+        if let Some(grandparent) = parent.parent() {
+            paths_to_try.push(grandparent.join("Resources").join(&binary_name_with_ext));
+        }
+    }
+    
+    // Location 4: Check if it's in a binaries subdirectory (for development)
+    let arch_dir = if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") {
+            "macos-aarch64"
+        } else {
+            "macos-x86_64"
+        }
+    } else if cfg!(target_os = "linux") {
+        "linux-x86_64"
+    } else if cfg!(target_os = "windows") {
+        "windows-x86_64"
+    } else {
+        "unknown"
+    };
+    
+    paths_to_try.push(exe_dir.join("binaries").join(arch_dir).join(&binary_name_with_ext));
+    
+    // Try each path
+    for path in &paths_to_try {
         if path.exists() {
             eprintln!("[FFmpeg] Found {} at: {}", binary_name, path.display());
             return Ok(path.clone());
@@ -120,10 +128,10 @@ fn get_sidecar_path(binary_name: &str) -> Result<PathBuf> {
     
     // If not found in any location, provide helpful error
     anyhow::bail!(
-        "FFmpeg binary '{}' not found. Tried locations: {:?}\n\
+        "FFmpeg binary '{}' not found. Tried locations:\n{}\n\
          Please ensure FFmpeg is bundled with the application or installed on your system.",
         binary_name,
-        paths_to_try.iter().flatten().map(|p| p.display().to_string()).collect::<Vec<_>>()
+        paths_to_try.iter().map(|p| format!("  - {}", p.display())).collect::<Vec<_>>().join("\n")
     );
 }
 
