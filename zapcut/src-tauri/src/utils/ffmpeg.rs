@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VideoInfo {
@@ -36,26 +37,69 @@ struct FFProbeStream {
     r_frame_rate: Option<String>,
 }
 
-pub fn get_ffmpeg_path() -> String {
+/// Get the path to the FFmpeg binary
+/// In development mode, uses system FFmpeg
+/// In production, uses bundled FFmpeg binary
+pub fn get_ffmpeg_path() -> Result<PathBuf> {
     if cfg!(debug_assertions) {
-        "ffmpeg".to_string()
+        // In development, use system ffmpeg
+        Ok(PathBuf::from("ffmpeg"))
     } else {
-        // TODO: Use bundled binary path
-        "ffmpeg".to_string()
+        // In production, resolve to bundled sidecar binary
+        // The binary name will automatically get platform-specific suffix (.exe on Windows)
+        get_sidecar_path("ffmpeg")
     }
 }
 
-pub fn get_ffprobe_path() -> String {
+/// Get the path to the FFprobe binary
+/// In development mode, uses system FFprobe
+/// In production, uses bundled FFprobe binary
+pub fn get_ffprobe_path() -> Result<PathBuf> {
     if cfg!(debug_assertions) {
-        "ffprobe".to_string()
+        // In development, use system ffprobe
+        Ok(PathBuf::from("ffprobe"))
     } else {
-        // TODO: Use bundled binary path
-        "ffprobe".to_string()
+        // In production, resolve to bundled sidecar binary
+        get_sidecar_path("ffprobe")
     }
+}
+
+/// Helper function to get sidecar binary path
+/// Constructs the path based on platform conventions
+fn get_sidecar_path(binary_name: &str) -> Result<PathBuf> {
+    // Get the current executable's directory
+    let exe_dir = std::env::current_exe()
+        .context("Failed to get current executable path")?
+        .parent()
+        .context("Failed to get executable parent directory")?
+        .to_path_buf();
+    
+    // Construct platform-specific binary name
+    let binary_name_with_ext = if cfg!(target_os = "windows") {
+        format!("{}.exe", binary_name)
+    } else {
+        binary_name.to_string()
+    };
+    
+    // On macOS, binaries are typically in MacOS folder of the app bundle
+    // On Linux/Windows, they're in the same directory as the executable
+    let binary_path = exe_dir.join(&binary_name_with_ext);
+    
+    // Verify the binary exists
+    if !binary_path.exists() {
+        anyhow::bail!(
+            "FFmpeg binary '{}' not found at: {}. Please ensure FFmpeg is bundled with the application.",
+            binary_name,
+            binary_path.display()
+        );
+    }
+    
+    Ok(binary_path)
 }
 
 pub fn get_video_info(file_path: &str) -> Result<VideoInfo> {
-    let output = Command::new(get_ffprobe_path())
+    let ffprobe_path = get_ffprobe_path()?;
+    let output = Command::new(ffprobe_path)
         .args(&[
             "-v",
             "quiet",
@@ -145,7 +189,8 @@ fn parse_frame_rate(rate_str: &Option<String>) -> Option<f64> {
 }
 
 pub fn generate_thumbnail(video_path: &str, output_path: &str, timestamp: f64) -> Result<()> {
-    let output = Command::new(get_ffmpeg_path())
+    let ffmpeg_path = get_ffmpeg_path()?;
+    let output = Command::new(ffmpeg_path)
         .args(&[
             "-ss",
             &timestamp.to_string(),

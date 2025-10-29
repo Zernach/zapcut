@@ -16,12 +16,20 @@ jobs:
         include:
           - platform: 'macos-latest'
             args: '--target aarch64-apple-darwin'
+            arch: 'aarch64'
+            friendly_name: 'MacBook-AppleSilicon'
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin'
+            arch: 'x86_64'
+            friendly_name: 'MacBook-Intel'
           - platform: 'ubuntu-22.04'
             args: ''
-          # - platform: 'windows-latest'
-          #   args: ''
+            arch: 'amd64'
+            friendly_name: 'Linux'
+          - platform: 'windows-latest'
+            args: ''
+            arch: 'x64'
+            friendly_name: 'Windows'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -45,6 +53,51 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Download FFmpeg binaries (macOS Apple Silicon)
+        if: matrix.platform == 'macos-latest' && matrix.arch == 'aarch64'
+        run: |
+          cd zapcut/src-tauri/binaries/macos-aarch64
+          curl -L https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip -o ffmpeg.zip
+          curl -L https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip -o ffprobe.zip
+          unzip -o ffmpeg.zip
+          unzip -o ffprobe.zip
+          rm ffmpeg.zip ffprobe.zip
+          chmod +x ffmpeg ffprobe
+
+      - name: Download FFmpeg binaries (macOS Intel)
+        if: matrix.platform == 'macos-latest' && matrix.arch == 'x86_64'
+        run: |
+          cd zapcut/src-tauri/binaries/macos-x86_64
+          curl -L https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip -o ffmpeg.zip
+          curl -L https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip -o ffprobe.zip
+          unzip -o ffmpeg.zip
+          unzip -o ffprobe.zip
+          rm ffmpeg.zip ffprobe.zip
+          chmod +x ffmpeg ffprobe
+
+      - name: Download FFmpeg binaries (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          cd zapcut/src-tauri/binaries/linux-x86_64
+          wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          tar -xf ffmpeg-release-amd64-static.tar.xz
+          mv ffmpeg-*-amd64-static/ffmpeg .
+          mv ffmpeg-*-amd64-static/ffprobe .
+          rm -rf ffmpeg-*-amd64-static*
+          chmod +x ffmpeg ffprobe
+
+      - name: Download FFmpeg binaries (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd zapcut/src-tauri/binaries/windows-x86_64
+          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "."
+          $ffmpegDir = Get-ChildItem -Directory -Filter "ffmpeg-*" | Select-Object -First 1
+          Move-Item -Path "$($ffmpegDir.FullName)\bin\ffmpeg.exe" -Destination "." -Force
+          Move-Item -Path "$($ffmpegDir.FullName)\bin\ffprobe.exe" -Destination "." -Force
+          Remove-Item -Recurse -Force $ffmpegDir, "ffmpeg.zip"
 
       - name: Install frontend dependencies
         run: |
@@ -72,4 +125,102 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Rename artifacts to user-friendly names
+        shell: bash
+        run: |
+          cd zapcut/src-tauri/target/release/bundle
+          
+          # Get version from tag (remove 'v' prefix)
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          
+          # Rename based on platform
+          if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
+            # macOS DMG files
+            if [ -d "dmg" ]; then
+              cd dmg
+              for file in *.dmg; do
+                if [ -f "$file" ]; then
+                  # Replace architecture names with friendly names
+                  newname=$(echo "$file" | sed "s/_aarch64/_${{ matrix.friendly_name }}/g" | sed "s/_x64/_${{ matrix.friendly_name }}/g")
+                  if [ "$file" != "$newname" ]; then
+                    mv "$file" "$newname"
+                    echo "Renamed: $file -> $newname"
+                  fi
+                fi
+              done
+              cd ..
+            fi
+            # macOS app bundles
+            if [ -d "macos" ]; then
+              cd macos
+              for file in *.app.tar.gz; do
+                if [ -f "$file" ]; then
+                  newname=$(echo "$file" | sed "s/_aarch64/_${{ matrix.friendly_name }}/g" | sed "s/_x64/_${{ matrix.friendly_name }}/g")
+                  if [ "$file" != "$newname" ]; then
+                    mv "$file" "$newname"
+                    echo "Renamed: $file -> $newname"
+                  fi
+                fi
+              done
+              cd ..
+            fi
+          elif [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
+            # Linux files
+            if [ -d "deb" ]; then
+              cd deb
+              for file in *.deb; do
+                if [ -f "$file" ]; then
+                  newname=$(echo "$file" | sed "s/_amd64/_${{ matrix.friendly_name }}/g")
+                  if [ "$file" != "$newname" ]; then
+                    mv "$file" "$newname"
+                    echo "Renamed: $file -> $newname"
+                  fi
+                fi
+              done
+              cd ..
+            fi
+            if [ -d "appimage" ]; then
+              cd appimage
+              for file in *.AppImage; do
+                if [ -f "$file" ]; then
+                  newname=$(echo "$file" | sed "s/_amd64/_${{ matrix.friendly_name }}/g")
+                  if [ "$file" != "$newname" ]; then
+                    mv "$file" "$newname"
+                    echo "Renamed: $file -> $newname"
+                  fi
+                fi
+              done
+              cd ..
+            fi
+          elif [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+            # Windows files
+            if [ -d "nsis" ]; then
+              cd nsis
+              for file in *.exe; do
+                if [ -f "$file" ]; then
+                  newname=$(echo "$file" | sed "s/_x64-setup/_${{ matrix.friendly_name }}-setup/g")
+                  if [ "$file" != "$newname" ]; then
+                    mv "$file" "$newname"
+                    echo "Renamed: $file -> $newname"
+                  fi
+                fi
+              done
+              cd ..
+            fi
+            if [ -d "msi" ]; then
+              cd msi
+              for file in *.msi; do
+                if [ -f "$file" ]; then
+                  newname=$(echo "$file" | sed "s/_x64/_${{ matrix.friendly_name }}/g")
+                  if [ "$file" != "$newname" ]; then
+                    mv "$file" "$newname"
+                    echo "Renamed: $file -> $newname"
+                  fi
+                fi
+              done
+              cd ..
+            fi
+          fi
 

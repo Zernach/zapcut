@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::command;
+use crate::utils::ffmpeg::get_ffmpeg_path;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExportConfig {
@@ -64,10 +65,15 @@ pub async fn export_timeline(clips: Vec<Clip>, config: ExportConfig) -> Result<S
         progress.status = "trimming clips".to_string();
     }
 
-    let ffmpeg_path = if cfg!(debug_assertions) {
-        "ffmpeg"
-    } else {
-        "ffmpeg"
+    // Get FFmpeg binary path
+    let ffmpeg_path = match get_ffmpeg_path() {
+        Ok(path) => path,
+        Err(e) => {
+            let mut progress = EXPORT_PROGRESS.lock().unwrap();
+            progress.status = "error".to_string();
+            progress.error = Some(format!("FFmpeg not found: {}", e));
+            return Err(format!("FFmpeg not found: {}", e));
+        }
     };
 
     // Step 1: Trim each clip and save as intermediate files
@@ -146,7 +152,7 @@ pub async fn export_timeline(clips: Vec<Clip>, config: ExportConfig) -> Result<S
             trimmed_file.to_str().unwrap().to_string(),
         ]);
         
-        let output = Command::new(ffmpeg_path)
+        let output = Command::new(&ffmpeg_path)
             .args(&ffmpeg_args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -200,7 +206,7 @@ pub async fn export_timeline(clips: Vec<Clip>, config: ExportConfig) -> Result<S
     }
 
     // Step 3: Concatenate all trimmed clips
-    let output = Command::new(ffmpeg_path)
+    let output = Command::new(&ffmpeg_path)
         .args(&[
             "-f",
             "concat",

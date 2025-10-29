@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { save } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { useTimelineStore } from '../../store/timelineStore';
 import { useAppStore } from '../../store/appStore';
 import { ExportConfig } from '../../types/export';
-import { X, FileVideo } from 'lucide-react';
+import { X, FileVideo, Loader2 } from 'lucide-react';
 
 export function ExportDialog() {
     const showExportDialog = useAppStore((state) => state.showExportDialog);
@@ -12,7 +12,9 @@ export function ExportDialog() {
     const clips = useTimelineStore((state) => state.clips);
     const [isExporting, setIsExporting] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [status, setStatus] = useState<string>('idle');
     const [error, setError] = useState<string | null>(null);
+    const [progressInterval, setProgressInterval] = useState<number | null>(null);
 
     const [config, setConfig] = useState<Partial<ExportConfig>>({
         resolution: '1080p',
@@ -22,6 +24,15 @@ export function ExportDialog() {
         includeAudio: true,
     });
 
+    // Cleanup interval on unmount or when dialog closes
+    useEffect(() => {
+        return () => {
+            if (progressInterval) {
+                clearInterval(progressInterval);
+            }
+        };
+    }, [progressInterval]);
+
     if (!showExportDialog) return null;
 
     const handleExport = async () => {
@@ -29,6 +40,7 @@ export function ExportDialog() {
             setIsExporting(true);
             setError(null);
             setProgress(0);
+            setStatus('preparing');
 
             // Open save dialog
             const outputPath = await save({
@@ -72,26 +84,34 @@ export function ExportDialog() {
             });
 
             // Poll for progress
-            const progressInterval = setInterval(async () => {
+            const interval = setInterval(async () => {
                 const prog = await invoke<{ percentage: number; status: string; error?: string }>(
                     'get_export_progress'
                 );
                 setProgress(prog.percentage);
+                setStatus(prog.status);
 
                 if (prog.status === 'complete') {
-                    clearInterval(progressInterval);
+                    clearInterval(interval);
+                    setProgressInterval(null);
                     setIsExporting(false);
                     setShowExportDialog(false);
                     alert('Export completed successfully!');
                 } else if (prog.status === 'error') {
-                    clearInterval(progressInterval);
+                    clearInterval(interval);
+                    setProgressInterval(null);
                     setIsExporting(false);
                     setError(prog.error || 'Export failed');
                 }
             }, 500);
 
+            setProgressInterval(interval);
+
             // Cleanup interval after 5 minutes max
-            setTimeout(() => clearInterval(progressInterval), 300000);
+            setTimeout(() => {
+                clearInterval(interval);
+                setProgressInterval(null);
+            }, 300000);
         } catch (err) {
             setIsExporting(false);
             setError(err instanceof Error ? err.message : 'Export failed');
@@ -188,16 +208,32 @@ export function ExportDialog() {
 
                     {/* Progress */}
                     {isExporting && (
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                                <span>Exporting...</span>
-                                <span>{Math.round(progress)}%</span>
+                        <div className="space-y-3 p-4 bg-background rounded-lg border border-border">
+                            <div className="flex items-center gap-3">
+                                <Loader2 className="animate-spin text-blue-500" size={20} />
+                                <div className="flex-1">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-sm font-medium capitalize">
+                                            {status === 'preparing' && 'Preparing export...'}
+                                            {status === 'trimming clips' && 'Processing clips...'}
+                                            {status === 'concatenating' && 'Combining clips...'}
+                                            {status === 'finalizing' && 'Finalizing video...'}
+                                            {status === 'complete' && 'Complete!'}
+                                        </span>
+                                        <span className="text-sm font-semibold text-blue-400">
+                                            {Math.round(progress)}%
+                                        </span>
+                                    </div>
+                                    <div className="w-full h-2.5 bg-gray-700 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-300 ease-out"
+                                            style={{ width: `${progress}%` }}
+                                        />
+                                    </div>
+                                </div>
                             </div>
-                            <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-blue-600 transition-all"
-                                    style={{ width: `${progress}%` }}
-                                />
+                            <div className="text-xs text-gray-400">
+                                This may take a few moments depending on video length and quality settings...
                             </div>
                         </div>
                     )}

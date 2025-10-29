@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use tokio::fs;
 use anyhow::Result;
 use crate::utils::app_init::get_recordings_dir;
+use crate::utils::ffmpeg::{get_ffmpeg_path, get_ffprobe_path};
 
 #[cfg(target_os = "macos")]
 use cocoa::base::nil;
@@ -68,7 +69,8 @@ pub async fn get_available_screens() -> Result<Vec<String>, String> {
     #[cfg(target_os = "macos")]
     {
         // Use FFmpeg to get actual device list
-        let output = Command::new("ffmpeg")
+        let ffmpeg_path = get_ffmpeg_path().map_err(|e| format!("FFmpeg not found: {}", e))?;
+        let output = Command::new(ffmpeg_path)
             .args(&["-f", "avfoundation", "-list_devices", "true", "-i", ""])
             .output()
             .map_err(|e| format!("Failed to get screen devices: {}", e))?;
@@ -125,7 +127,8 @@ pub async fn get_available_microphones() -> Result<Vec<String>, String> {
     #[cfg(target_os = "macos")]
     {
         // Use FFmpeg to get actual device list
-        let output = Command::new("ffmpeg")
+        let ffmpeg_path = get_ffmpeg_path().map_err(|e| format!("FFmpeg not found: {}", e))?;
+        let output = Command::new(ffmpeg_path)
             .args(&["-f", "avfoundation", "-list_devices", "true", "-i", ""])
             .output()
             .map_err(|e| format!("Failed to get audio devices: {}", e))?;
@@ -182,7 +185,8 @@ pub async fn get_available_webcams() -> Result<Vec<String>, String> {
     #[cfg(target_os = "macos")]
     {
         // Use FFmpeg to get actual device list
-        let output = Command::new("ffmpeg")
+        let ffmpeg_path = get_ffmpeg_path().map_err(|e| format!("FFmpeg not found: {}", e))?;
+        let output = Command::new(ffmpeg_path)
             .args(&["-f", "avfoundation", "-list_devices", "true", "-i", ""])
             .output()
             .map_err(|e| format!("Failed to get camera devices: {}", e))?;
@@ -250,7 +254,11 @@ pub async fn check_screen_recording_permission() -> Result<bool, String> {
             eprintln!("[Permission Check] CGPreflightScreenCaptureAccess returned: {}", has_permission);
             
             // Also try a test FFmpeg command to see if screen capture works
-            let test_result = Command::new("ffmpeg")
+            let ffmpeg_path = match get_ffmpeg_path() {
+                Ok(path) => path,
+                Err(_) => return Ok(has_permission), // Fall back to API result if FFmpeg not found
+            };
+            let test_result = Command::new(ffmpeg_path)
                 .args(&["-f", "avfoundation", "-list_devices", "true", "-i", ""])
                 .output();
             
@@ -292,7 +300,8 @@ pub async fn test_screen_recording_access() -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
         // Try to run FFmpeg with screen capture to test access
-        let test_result = Command::new("ffmpeg")
+        let ffmpeg_path = get_ffmpeg_path().map_err(|e| format!("FFmpeg not found: {}", e))?;
+        let test_result = Command::new(ffmpeg_path)
             .args(&[
                 "-f", "avfoundation",
                 "-i", "1",  // Screen capture device
@@ -345,8 +354,11 @@ pub async fn test_recording_command(settings: RecordingSettings) -> Result<Strin
         
         let output_file = recordings_dir.join(&filename);
         
+        // Get FFmpeg path
+        let ffmpeg_path = get_ffmpeg_path().map_err(|e| format!("FFmpeg not found: {}", e))?;
+        
         // Build FFmpeg command based on settings
-        let mut ffmpeg_cmd = Command::new("ffmpeg");
+        let mut ffmpeg_cmd = Command::new(&ffmpeg_path);
         
         // Prevent FFmpeg from reading stdin (critical for screen recording)
         ffmpeg_cmd.arg("-nostdin");
@@ -411,7 +423,7 @@ pub async fn test_recording_command(settings: RecordingSettings) -> Result<Strin
         let command_string = format!("ffmpeg {}", command_args.join(" "));
         
         // Try to run the command for 2 seconds to test it
-        let test_result = Command::new("ffmpeg")
+        let test_result = Command::new(&ffmpeg_path)
             .args(ffmpeg_cmd.get_args())
             .arg("-t").arg("2") // Record for only 2 seconds
             .output();
@@ -469,8 +481,11 @@ pub async fn start_recording(
     state.is_recording = true;
     state.is_paused = false;
     
+    // Get FFmpeg path
+    let ffmpeg_path = get_ffmpeg_path().map_err(|e| format!("FFmpeg not found: {}", e))?;
+    
     // Build FFmpeg command based on settings
-    let mut ffmpeg_cmd = Command::new("ffmpeg");
+    let mut ffmpeg_cmd = Command::new(&ffmpeg_path);
     
     // Prevent FFmpeg from reading stdin (critical for screen recording)
     ffmpeg_cmd.arg("-nostdin");
@@ -842,7 +857,8 @@ pub async fn generate_recording_thumbnail(file_path: String) -> Result<String, S
     let thumbnail_path = app_data.join(&thumbnail_name);
     
     // Get video duration first
-    let ffprobe_output = Command::new("ffprobe")
+    let ffprobe_path = get_ffprobe_path().map_err(|e| format!("FFprobe not found: {}", e))?;
+    let ffprobe_output = Command::new(ffprobe_path)
         .args(&[
             "-v", "error",
             "-show_entries", "format=duration",
@@ -859,7 +875,8 @@ pub async fn generate_recording_thumbnail(file_path: String) -> Result<String, S
     let timestamp_seconds = (duration * 0.1).max(1.0).min(duration);
     
     // Use FFmpeg to generate thumbnail
-    let output = Command::new("ffmpeg")
+    let ffmpeg_path = get_ffmpeg_path().map_err(|e| format!("FFmpeg not found: {}", e))?;
+    let output = Command::new(ffmpeg_path)
         .args(&[
             "-ss", &timestamp_seconds.to_string(),
             "-i", &file_path,

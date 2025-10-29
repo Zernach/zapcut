@@ -36,6 +36,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "binaries/macos-aarch64/*",
+      "binaries/macos-x86_64/*",
+      "binaries/linux-x86_64/*",
+      "binaries/windows-x86_64/*"
+    ],
     "macOS": {
       "entitlements": "entitlements.plist",
       "infoPlist": "Info.plist"

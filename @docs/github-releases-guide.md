@@ -28,13 +28,17 @@ This ensures all code changes are validated before merging.
 - Manual workflow dispatch
 
 **Actions:**
+- Downloads FFmpeg binaries for each platform during build
 - Builds for multiple platforms:
   - macOS (Apple Silicon - aarch64)
   - macOS (Intel - x86_64)
   - Windows (x64)
   - Linux (Ubuntu 22.04)
+- Renames artifacts to user-friendly names (e.g., "MacBook-AppleSilicon" instead of "aarch64")
 - Creates a GitHub release as a draft
-- Uploads built artifacts to the release
+- Uploads built artifacts with friendly names to the release
+
+**Important:** FFmpeg binaries are automatically downloaded and bundled during the GitHub Actions build. No manual setup required for releases.
 
 ## Creating a Release
 
@@ -87,20 +91,74 @@ git push origin v0.2.0
 
 ## Available Artifacts
 
-After a successful release build, the following artifacts are created:
+After a successful release build, the following artifacts are created with user-friendly names:
 
 ### macOS
-- `ZapCut_<version>_aarch64.dmg` - Apple Silicon installer
-- `ZapCut_<version>_x64.dmg` - Intel Mac installer
-- `.app.tar.gz` files for both architectures
+- `ZapCut_<version>_MacBook-AppleSilicon.dmg` - Apple Silicon (M1/M2/M3) installer
+- `ZapCut_<version>_MacBook-Intel.dmg` - Intel Mac installer
+- `.app.tar.gz` files for both architectures (with friendly names)
 
 ### Windows
-- `ZapCut_<version>_x64-setup.exe` - Windows installer
-- `ZapCut_<version>_x64_en-US.msi` - MSI installer
+- `ZapCut_<version>_Windows-setup.exe` - Windows installer
+- `ZapCut_<version>_Windows_en-US.msi` - MSI installer
 
 ### Linux
-- `zapcut_<version>_amd64.deb` - Debian package
-- `zapcut_<version>_amd64.AppImage` - AppImage (portable)
+- `zapcut_<version>_Linux.deb` - Debian package
+- `zapcut_<version>_Linux.AppImage` - AppImage (portable)
+
+**Note:** All artifacts now use friendly, user-understandable names instead of technical architecture identifiers.
+
+## FFmpeg Bundling
+
+ZapCut requires FFmpeg for video processing. The application is configured to bundle FFmpeg binaries automatically:
+
+### GitHub Actions (Automated)
+
+When building via GitHub Actions (releases), FFmpeg binaries are automatically downloaded during the build process for each platform:
+- macOS: Downloaded from evermeet.cx
+- Linux: Downloaded from John Van Sickle's static builds
+- Windows: Downloaded from gyan.dev
+
+No manual intervention is required for GitHub releases.
+
+### Local Development
+
+For local development, you need FFmpeg installed on your system:
+
+**macOS:**
+```bash
+brew install ffmpeg
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt-get install ffmpeg
+```
+
+**Windows:**
+Download from https://ffmpeg.org/download.html or use Chocolatey:
+```bash
+choco install ffmpeg
+```
+
+### Local Builds (Production)
+
+If you want to build the production app locally with bundled FFmpeg:
+
+1. Navigate to `zapcut/src-tauri/binaries/`
+2. Run the download script:
+   ```bash
+   ./download_ffmpeg.sh
+   ```
+   (Note: Windows FFmpeg must be downloaded manually - see `binaries/README.md`)
+
+3. Build the app:
+   ```bash
+   cd zapcut
+   npm run tauri build
+   ```
+
+The FFmpeg binaries will be automatically included in the app bundle.
 
 ## Optional: Code Signing Setup
 
@@ -155,6 +213,22 @@ Follow semantic versioning (semver):
 
 ## Troubleshooting
 
+### App Crashes on Startup or When Importing Videos
+
+**Cause:** FFmpeg binaries are missing or not properly bundled.
+
+**For Development:**
+- Ensure FFmpeg is installed on your system (see "Local Development" section above)
+- Test with: `ffmpeg -version` in terminal
+
+**For Production Builds:**
+- Verify FFmpeg binaries exist in `zapcut/src-tauri/binaries/<platform>/`
+- Check that `tauri.conf.json` includes the binaries in the `bundle.resources` section
+- For GitHub releases, verify the FFmpeg download step completed successfully in Actions logs
+
+**For End Users:**
+If users report the app crashes when trying to import or process videos, the FFmpeg binaries may not have been bundled correctly. Check the build artifacts and rebuild if necessary.
+
 ### Build Fails on Ubuntu
 Ensure all webkit2gtk dependencies are installed. The workflow already includes them, but local builds need:
 ```bash
@@ -170,6 +244,13 @@ rustup target add x86_64-apple-darwin
 
 ### Build Fails on Windows
 Ensure you have the MSVC build tools installed via Visual Studio.
+
+### FFmpeg Download Fails in GitHub Actions
+- Check if the FFmpeg download URLs are still valid
+- macOS: https://evermeet.cx/ffmpeg/
+- Linux: https://johnvansickle.com/ffmpeg/
+- Windows: https://www.gyan.dev/ffmpeg/builds/
+- Update URLs in `.github/workflows/release.yml` if they've changed
 
 ### Release Not Creating
 - Verify the tag follows the pattern `v*` (e.g., `v1.0.0`)

@@ -1,0 +1,12 @@
+# Ignore all FFmpeg binaries
+**/ffmpeg
+**/ffmpeg.exe
+**/ffprobe
+**/ffprobe.exe
+
+# But keep the directory structure
+!.gitignore
+!README.md
+!download_ffmpeg.sh
+!*/.gitkeep
+
