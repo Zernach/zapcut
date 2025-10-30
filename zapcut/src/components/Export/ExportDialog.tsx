@@ -68,6 +68,7 @@ export function ExportDialog() {
                 trim_end: clip.trimEnd,
                 duration: clip.duration,
                 speed: clip.speed || 1.0,
+                track_index: clip.trackIndex,
             }));
 
             const exportConfig = {

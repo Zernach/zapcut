@@ -341,14 +341,15 @@ pub async fn export_timeline(clips: Vec<Clip>, config: ExportConfig) -> Result<S
         let trimmed_file = temp_dir.join(format!("clip_{:03}.mp4", index));
         
         // Phase 3a: Calculate correct source duration
-        // clip.duration is the timeline duration (what user sees after speed adjustment)
-        // source_duration is how much of the original video we need before applying speed
-        let source_duration = clip.duration / clip.speed;
+        // CRITICAL: clip.duration is ALREADY the timeline duration (after speed adjustment)
+        // Formula: timeline_duration = source_duration / speed
+        // Therefore: source_duration = timeline_duration × speed
+        let source_duration = clip.duration * clip.speed;
         
         println!("  - Trim start: {:.3}s", clip.trim_start);
-        println!("  - Source duration needed: {:.3}s", source_duration);
-        println!("  - Speed: {:.2}x", clip.speed);
-        println!("  - Output duration: {:.3}s", clip.duration);
+        println!("  - Source duration needed: {:.3}s (timeline: {:.3}s × speed: {:.2}x)", 
+            source_duration, clip.duration, clip.speed);
+        println!("  - Output duration (after speed): {:.3}s", clip.duration);
         
         // Build FFmpeg command to extract, trim, apply speed, and normalize
         let mut ffmpeg_args = vec![
