@@ -397,7 +397,7 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                             disabled={!settings.screen_recording_enabled && !settings.microphone_enabled && !settings.webcam_enabled}
                             className={`px-4 py-2 text-white rounded transition-colors ${!settings.screen_recording_enabled && !settings.microphone_enabled && !settings.webcam_enabled
                                 ? 'bg-gray-500 cursor-not-allowed opacity-50'
-                                : 'bg-red-600 hover:bg-red-700'
+                                : 'bg-green-600 hover:bg-green-700'
                                 }`}
                         >
                             Start Recording
@@ -405,9 +405,9 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                     ) : (
                         <button
                             onClick={handleStopRecording}
-                            className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
+                            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
                         >
-                            Stop
+                            Stop Recording
                         </button>
                     )}
                 </div>
@@ -417,15 +417,15 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
                     <div className="flex gap-2">
                         <button
                             onClick={handleImportToGallery}
-                            className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                            className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                         >
-                            Import to Gallery
+                            Add to Timeline
                         </button>
                         <button
                             onClick={handleExportToFile}
-                            className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                            className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                         >
-                            Export to File
+                            Export Recording
                         </button>
                     </div>
                 )}

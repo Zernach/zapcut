@@ -40,7 +40,7 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
     const [showAddedFeedback, setShowAddedFeedback] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
     const [showDurationDialog, setShowDurationDialog] = useState(false);
-    const [targetDuration, setTargetDuration] = useState('2000');
+    const [targetDuration, setTargetDuration] = useState('2');
     const {
         currentTime,
         isPlaying,
@@ -495,7 +495,7 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
     const handleDurationSubmit = () => {
         const targetDurationMs = parseFloat(targetDuration);
         if (isNaN(targetDurationMs) || targetDurationMs <= 0) {
-            alert('Please enter a valid duration in milliseconds');
+            alert('Please enter a valid duration in seconds');
             return;
         }
 
@@ -517,7 +517,7 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
 
         clearMediaSelection();
         setShowDurationDialog(false);
-        setTargetDuration('2000');
+        setTargetDuration('2');
     };
 
     // Handle single item add (backward compatibility)
@@ -575,13 +575,13 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
                     <div className="bg-panel border border-border rounded-lg p-6 shadow-xl max-w-md" onClick={(e) => e.stopPropagation()}>
                         <h3 className="text-lg font-semibold mb-4">Set Clip Duration</h3>
                         <p className="text-sm text-gray-400 mb-4">
-                            Enter the target duration in milliseconds for each clip. The speed will be adjusted accordingly.
+                            Enter the target duration in seconds for each clip. The speed will be adjusted accordingly.
                         </p>
                         <input
                             type="number"
                             value={targetDuration}
                             onChange={(e) => setTargetDuration(e.target.value)}
-                            placeholder="2000"
+                            placeholder="2"
                             className="w-full px-3 py-2 bg-background border border-border rounded text-sm mb-4"
                             autoFocus
                         />
@@ -590,7 +590,7 @@ export const VideoPlayer = memo(function VideoPlayer({ src, autoPlay = false }: 
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setShowDurationDialog(false);
-                                    setTargetDuration('2000');
+                                    setTargetDuration('2');
                                 }}
                                 className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors"
                             >

@@ -6,6 +6,18 @@
 
 A modern, high-performance native video editor built with Tauri and React. Edit videos with the power of a desktop app and the elegance of a web interface.
 
+
+
+*DEMO VIDEO: Click the image below to watch on YouTube*
+
+<br/>
+
+[![Demo Video](https://img.youtube.com/vi/kTmvyJ9XBmw/maxresdefault.jpg)](https://www.youtube.com/watch?v=kTmvyJ9XBmw)
+
+*DEMO VIDEO: Click the image above to watch on YouTube*
+
+<br/>
+
 [![GitHub](https://img.shields.io/badge/GitHub-Zernach/zapcut-181717?style=for-the-badge&logo=github)](https://github.com/Zernach/zapcut)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -16,11 +28,6 @@ A modern, high-performance native video editor built with Tauri and React. Edit 
 ![Rust](https://img.shields.io/badge/Rust-1.75+-orange?logo=rust)
 
 <br/>
-
-<p>
-  <img src="@docs/images/readme-edit-screen.png" alt="ZapCut Edit Screen" width="49%" />
-  <img src="@docs/images/readme-record-screen.png" alt="ZapCut Record Screen" width="49%" />
-</p>
 
 </div>
 
