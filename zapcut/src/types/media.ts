@@ -38,6 +38,9 @@ export interface MediaItem {
     fileSize: number;
     codec: string;
     importedAt: string;
+    isLoading?: boolean;
+    loadingProgress?: number; // 0-100
+    loadingError?: string;
 }
 
 export interface ImportProgress {

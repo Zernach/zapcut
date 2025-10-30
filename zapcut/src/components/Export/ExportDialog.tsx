@@ -80,14 +80,17 @@ export function ExportDialog() {
                 include_audio: config.includeAudio !== false,
             };
 
-            // Start export
-            await invoke('export_timeline', {
+            // Start export (don't await - let it run in background)
+            invoke('export_timeline', {
                 clips: exportClips,
                 config: exportConfig,
+            }).catch((err) => {
+                setIsExporting(false);
+                setError(err instanceof Error ? err.message : 'Export failed');
             });
 
-            // Poll for progress
-            const interval = setInterval(async () => {
+            // Poll for progress immediately and then every 200ms for smoother updates
+            const pollProgress = async () => {
                 const prog = await invoke<{
                     percentage: number;
                     status: string;
@@ -111,7 +114,13 @@ export function ExportDialog() {
                     setIsExporting(false);
                     setError(prog.error || 'Export failed');
                 }
-            }, 500);
+            };
+
+            // Poll immediately for initial state
+            pollProgress();
+
+            // Then poll every 200ms for smooth progress updates
+            const interval = setInterval(pollProgress, 200);
 
             setProgressInterval(interval);
 

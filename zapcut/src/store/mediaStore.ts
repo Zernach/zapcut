@@ -7,6 +7,10 @@ interface MediaStore {
     isImporting: boolean;
 
     addItems: (items: MediaItem[]) => void;
+    addPlaceholderItems: (placeholders: MediaItem[]) => void;
+    updateItemProgress: (id: string, progress: number) => void;
+    completeItemLoading: (id: string, completeItem: MediaItem) => void;
+    setItemError: (id: string, error: string) => void;
     removeItem: (id: string) => void;
     selectItem: (id: string | null) => void;
     toggleItemSelection: (id: string, multiSelect: boolean) => void;
@@ -23,6 +27,32 @@ export const useMediaStore = create<MediaStore>((set) => ({
     addItems: (items) =>
         set((state) => ({
             items: [...state.items, ...items],
+        })),
+
+    addPlaceholderItems: (placeholders) =>
+        set((state) => ({
+            items: [...state.items, ...placeholders],
+        })),
+
+    updateItemProgress: (id, progress) =>
+        set((state) => ({
+            items: state.items.map((item) =>
+                item.id === id ? { ...item, loadingProgress: progress } : item
+            ),
+        })),
+
+    completeItemLoading: (id, completeItem) =>
+        set((state) => ({
+            items: state.items.map((item) =>
+                item.id === id ? { ...completeItem, isLoading: false, loadingProgress: undefined } : item
+            ),
+        })),
+
+    setItemError: (id, error) =>
+        set((state) => ({
+            items: state.items.map((item) =>
+                item.id === id ? { ...item, isLoading: false, loadingError: error } : item
+            ),
         })),
 
     removeItem: (id) =>
