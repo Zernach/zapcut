@@ -13,6 +13,7 @@ export function ExportDialog() {
     const [isExporting, setIsExporting] = useState(false);
     const [progress, setProgress] = useState(0);
     const [status, setStatus] = useState<string>('idle');
+    const [currentClip, setCurrentClip] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [progressInterval, setProgressInterval] = useState<number | null>(null);
 
@@ -86,11 +87,16 @@ export function ExportDialog() {
 
             // Poll for progress
             const interval = setInterval(async () => {
-                const prog = await invoke<{ percentage: number; status: string; error?: string }>(
-                    'get_export_progress'
-                );
+                const prog = await invoke<{
+                    percentage: number;
+                    status: string;
+                    error?: string;
+                    current_clip?: string;
+                }>('get_export_progress');
+
                 setProgress(prog.percentage);
                 setStatus(prog.status);
+                setCurrentClip(prog.current_clip || null);
 
                 if (prog.status === 'complete') {
                     clearInterval(interval);
@@ -215,10 +221,12 @@ export function ExportDialog() {
                                 <div className="flex-1">
                                     <div className="flex justify-between items-center mb-1">
                                         <span className="text-sm font-medium capitalize">
+                                            {status === 'validating' && 'Validating clips...'}
                                             {status === 'preparing' && 'Preparing export...'}
-                                            {status === 'trimming clips' && 'Processing clips...'}
+                                            {status === 'processing clips' && 'Processing clips...'}
                                             {status === 'concatenating' && 'Combining clips...'}
                                             {status === 'finalizing' && 'Finalizing video...'}
+                                            {status === 'validating output' && 'Validating output...'}
                                             {status === 'complete' && 'Complete!'}
                                         </span>
                                         <span className="text-sm font-semibold text-blue-400">
@@ -234,7 +242,11 @@ export function ExportDialog() {
                                 </div>
                             </div>
                             <div className="text-xs text-gray-400">
-                                This may take a few moments depending on video length and quality settings...
+                                {status === 'processing clips' && currentClip ? (
+                                    <span>Processing clip {currentClip}</span>
+                                ) : (
+                                    <span>This may take a few moments depending on video length and quality settings...</span>
+                                )}
                             </div>
                         </div>
                     )}

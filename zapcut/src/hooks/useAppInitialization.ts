@@ -8,7 +8,7 @@ export function useAppInitialization() {
                 // Small delay to ensure Tauri is fully initialized
                 await new Promise(resolve => setTimeout(resolve, 100));
 
-                const zapCutDir = await invoke<string>('init_app');
+                await invoke<string>('init_app');
             } catch (error) {
                 console.error('Failed to initialize app directories:', error);
                 // Log more specific error info for debugging

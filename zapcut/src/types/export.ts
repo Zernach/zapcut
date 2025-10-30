@@ -10,7 +10,8 @@ export interface ExportConfig {
 
 export interface ExportProgress {
     percentage: number;
-    status: 'idle' | 'preparing' | 'trimming clips' | 'concatenating' | 'finalizing' | 'complete' | 'error';
+    status: 'idle' | 'validating' | 'preparing' | 'processing clips' | 'concatenating' | 'finalizing' | 'validating output' | 'complete' | 'error';
     error?: string;
+    current_clip?: string;
 }
 

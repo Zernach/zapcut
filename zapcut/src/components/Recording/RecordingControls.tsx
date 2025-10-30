@@ -313,7 +313,7 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({ className 
         if (recordingState.output_file) {
             try {
                 // First, copy the file to the gallery directory via backend
-                const result = await importToGallery(recordingState.output_file);
+                await importToGallery(recordingState.output_file);
 
                 // Then, add it to the media store so it appears in the edit screen
                 await importFromPaths([recordingState.output_file]);
